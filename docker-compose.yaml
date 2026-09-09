@@ -5,6 +5,8 @@ services:
     image: postgres:17-alpine
     container_name: vps-monitor-postgres
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vps_monitor}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
@@ -47,8 +49,8 @@ services:
       WORKER_MERCHANT_CONCURRENCY: ${WORKER_MERCHANT_CONCURRENCY:-2}
       MIGRATE_ON_START: ${MIGRATE_ON_START:-true}
       TZ: ${TZ:-Asia/Shanghai}
-    expose:
-      - "8080"
+    ports:
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,8 +75,8 @@ services:
         VITE_MOCK_API: "false"
     container_name: vps-monitor-frontend
     restart: unless-stopped
-    expose:
-      - "80"
+    ports:
+      - "5173:5173"
     depends_on:
       backend:
         condition: service_healthy

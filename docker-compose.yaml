@@ -3,6 +3,7 @@ name: vps-monitor
 services:
   postgres:
     image: postgres:17-alpine
+    container_name: vps-monitor-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-vps_monitor}
@@ -22,6 +23,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    container_name: vps-monitor-backend
     restart: unless-stopped
     environment:
       APP_ENV: production
@@ -69,6 +71,7 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_MOCK_API: "false"
+    container_name: vps-monitor-frontend
     restart: unless-stopped
     expose:
       - "80"

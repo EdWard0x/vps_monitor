@@ -1,0 +1,92 @@
+name: vps-monitor
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vps_monitor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-vps_monitor}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - app
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-vps_monitor}:${POSTGRES_PASSWORD:?请设置 POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vps_monitor}?sslmode=disable
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-20}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-5}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?请设置 JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?请设置 JWT_REFRESH_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-vps-monitor}
+      JWT_ACCESS_AUDIENCE: ${JWT_ACCESS_AUDIENCE:-vps-monitor-api}
+      JWT_REFRESH_AUDIENCE: ${JWT_REFRESH_AUDIENCE:-vps-monitor-refresh}
+      CSRF_SECRET: ${CSRF_SECRET:?请设置 CSRF_SECRET}
+      CURSOR_SECRET: ${CURSOR_SECRET:?请设置 CURSOR_SECRET}
+      FRONTEND_ORIGINS: https://${APP_DOMAIN:?请设置 APP_DOMAIN}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      SEARCH_BACKEND: sql
+      DEMO_MODE: "false"
+      WORKER_SCAN_SECONDS: ${WORKER_SCAN_SECONDS:-5}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
+      WORKER_MERCHANT_CONCURRENCY: ${WORKER_MERCHANT_CONCURRENCY:-2}
+      MIGRATE_ON_START: ${MIGRATE_ON_START:-true}
+      TZ: ${TZ:-Asia/Shanghai}
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/ready"]
+      interval: 15s
+      timeout: 3s
+      start_period: 30s
+      retries: 5
+    networks:
+      app:
+      nginx_gateway:
+        aliases:
+          - vps-monitor-backend
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_MOCK_API: "false"
+    restart: unless-stopped
+    expose:
+      - "80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      app:
+      nginx_gateway:
+        aliases:
+          - vps-monitor-frontend
+
+volumes:
+  postgres_data:
+
+networks:
+  app:
+    driver: bridge
+  nginx_gateway:
+    external: true
+    name: ${NGINX_NETWORK:-nginx}

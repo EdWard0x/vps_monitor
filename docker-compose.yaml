@@ -21,6 +21,20 @@ services:
     networks:
       - app
 
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: vps-monitor-flaresolverr
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8191:8191"
+    environment:
+      LOG_LEVEL: info
+      LOG_TIMESTAMP: "true"
+      LOG_JSON: "false"
+      TZ: ${TZ:-Asia/Shanghai}
+    networks:
+      - app
+
   backend:
     build:
       context: .
@@ -50,8 +64,6 @@ services:
       WORKER_MERCHANT_CONCURRENCY: ${WORKER_MERCHANT_CONCURRENCY:-2}
       MIGRATE_ON_START: ${MIGRATE_ON_START:-true}
       TZ: ${TZ:-Asia/Shanghai}
-    ports:
-      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy

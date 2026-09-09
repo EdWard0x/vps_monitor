@@ -19,7 +19,7 @@ func (c Collector) Collect(ctx context.Context, r ports.CollectRequest) (domain.
 	if !c.Enabled {
 		return domain.Observation{Status: 3, ErrorCode: "SOURCE_URL_REJECTED"}, nil
 	}
-	f, err := collector.Httpreq(r.SourceURL, "http://localhost:8191/v1", 8000)
+	f, err := collector.Httpreq(r.SourceURL, r.ProcessorURL, 8000)
 	if err != nil {
 		return domain.Observation{}, err
 	}

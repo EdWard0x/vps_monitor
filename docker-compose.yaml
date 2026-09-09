@@ -44,6 +44,7 @@ services:
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       SEARCH_BACKEND: sql
       DEMO_MODE: "false"
+      PROCESSOR_URL: ${PROCESSOR_URL:-?请设置 PROCESSOR_URL}
       WORKER_SCAN_SECONDS: ${WORKER_SCAN_SECONDS:-5}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-10}
       WORKER_MERCHANT_CONCURRENCY: ${WORKER_MERCHANT_CONCURRENCY:-2}
@@ -75,8 +76,6 @@ services:
         VITE_MOCK_API: "false"
     container_name: vps-monitor-frontend
     restart: unless-stopped
-    ports:
-      - "5173:5173"
     depends_on:
       backend:
         condition: service_healthy

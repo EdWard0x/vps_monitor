@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -297,6 +298,7 @@ func (s *Service) RunWorkerOnce(ctx context.Context, limit int) error {
 	var wg sync.WaitGroup
 	var first error
 	var mu sync.Mutex
+	//从env中传递processorURL
 	for _, l := range leases {
 		l := l
 		wg.Add(1)
@@ -316,7 +318,7 @@ func (s *Service) RunWorkerOnce(ctx context.Context, limit int) error {
 			}
 			// 每个采集任务有自己的超时；取消后及时释放定时器资源。
 			task, cancel := context.WithTimeout(ctx, time.Duration(l.Config.TimeoutSeconds)*time.Second)
-			o, collectErr := c.Collect(task, ports.CollectRequest{VPSID: l.VPS.ID, Code: l.VPS.Code, SourceURL: l.Config.SourceURL})
+			o, collectErr := c.Collect(task, ports.CollectRequest{VPSID: l.VPS.ID, Code: l.VPS.Code, SourceURL: l.Config.SourceURL, ProcessorURL: os.Getenv("PROCESSOR_URL")})
 			cancel()
 			if collectErr != nil {
 				o = domain.Observation{Status: 3, ErrorCode: "FETCH_NETWORK"}

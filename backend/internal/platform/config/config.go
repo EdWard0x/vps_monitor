@@ -8,10 +8,10 @@ import (
 )
 
 type Config struct {
-	Env, HTTPAddr, DatabaseURL, AccessSecret, RefreshSecret, Issuer, AccessAudience, RefreshAudience, CSRFSecret, CursorSecret, SearchBackend string
-	Origins, TrustedProxies                                                                                                                   []string
-	DemoMode                                                                                                                                  bool
-	DBMaxOpen, DBMaxIdle, WorkerScan, WorkerConcurrency, WorkerMerchantConcurrency                                                            int
+	Env, HTTPAddr, DatabaseURL, AccessSecret, RefreshSecret, Issuer, AccessAudience, RefreshAudience, CSRFSecret, CursorSecret, SearchBackend, Processor_Url string
+	Origins, TrustedProxies                                                                                                                                  []string
+	DemoMode                                                                                                                                                 bool
+	DBMaxOpen, DBMaxIdle, WorkerScan, WorkerConcurrency, WorkerMerchantConcurrency                                                                           int
 }
 
 // Load 为 API、Worker 和管理员 CLI 加载配置。
@@ -20,10 +20,11 @@ type Config struct {
 // cmd/migrate 和 cmd/seed 不调用本函数，需单独设置它们要求的环境变量。
 func Load() (Config, error) {
 	c := Config{
-		Env:             get("APP_ENV", "development"),
-		HTTPAddr:        get("HTTP_ADDR", ":8080"),
-		DatabaseURL:     os.Getenv("DATABASE_URL"),
-		AccessSecret:    os.Getenv("JWT_ACCESS_SECRET"),
+		Env:          get("APP_ENV", "development"),
+		HTTPAddr:     get("HTTP_ADDR", ":8080"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		AccessSecret: os.Getenv("JWT_ACCESS_SECRET"),
+		//Processor_Url:    os.Getenv("PROCESSOR_URL"),
 		RefreshSecret:   os.Getenv("JWT_REFRESH_SECRET"),
 		Issuer:          get("JWT_ISSUER", "vps-monitor"),
 		AccessAudience:  get("JWT_ACCESS_AUDIENCE", "vps-monitor-api"),

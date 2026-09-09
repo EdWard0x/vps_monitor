@@ -6,8 +6,8 @@ import (
 )
 
 type CollectRequest struct {
-	VPSID           int64
-	Code, SourceURL string
+	VPSID                         int64
+	Code, SourceURL, ProcessorURL string
 }
 
 // Collector 是库存采集器约定：根据套餐信息返回一次观测，不负责写数据库。

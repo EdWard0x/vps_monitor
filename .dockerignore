@@ -1,0 +1,7 @@
+.git
+.idea
+.gomodcache
+backend/.env
+backend/.gocache
+frontend/node_modules
+frontend/dist

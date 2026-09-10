@@ -17,10 +17,6 @@ import (
 // main 是 HTTP 服务入口：加载配置 → 装配依赖 → 注册路由 → 开始监听。
 // 第一次阅读可先跟到 httpapi.New，再追踪一个商家列表请求。
 func main() {
-	//err := godotenv.Load(".env")
-	//if err != nil {
-	//	slog.Error("failed to load .env file, proceeding with environment variables", "error", err)
-	//}
 	c, e := config.Load()
 	if e != nil {
 		slog.Error("configuration invalid", "error", e)

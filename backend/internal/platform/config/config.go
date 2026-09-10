@@ -2,9 +2,12 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -19,6 +22,10 @@ type Config struct {
 // godotenv.Load 不覆盖已有进程环境变量，所以终端中的 $env:变量名 优先。
 // cmd/migrate 和 cmd/seed 不调用本函数，需单独设置它们要求的环境变量。
 func Load() (Config, error) {
+	err := godotenv.Load(".env")
+	if err != nil {
+		slog.Error("failed to load .env file, proceeding with environment variables", "error", err)
+	}
 	c := Config{
 		Env:          get("APP_ENV", "development"),
 		HTTPAddr:     get("HTTP_ADDR", ":8080"),

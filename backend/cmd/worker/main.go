@@ -14,10 +14,6 @@ import (
 // main 启动独立于 API 的监控进程；它不接收 HTTP 请求，而是定期扫描数据库。
 // API 修改监控配置，Worker 读取配置、调用采集器并写回库存，两者通过数据库协作。
 func main() {
-	//err := godotenv.Load(".env")
-	//if err != nil {
-	//	slog.Error("failed to load .env file, proceeding with environment variables", "error", err)
-	//}
 	c, e := config.Load()
 	if e != nil {
 		slog.Error("configuration invalid", "error", e)

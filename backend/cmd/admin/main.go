@@ -18,10 +18,6 @@ var stdinReader = bufio.NewReader(os.Stdin)
 // main 展示 HTTP 之外的调用入口：命令行读取参数后复用 Service.CreateAdmin。
 // 密码交互输入，避免把密码写进命令参数和命令历史。
 func main() {
-	//err := godotenv.Load(".env")
-	//if err != nil {
-	//	slog.Error("failed to load .env file, proceeding with environment variables", "error", err)
-	//}
 	if len(os.Args) < 2 || os.Args[1] != "create" {
 		fmt.Fprintln(os.Stderr, "usage: admin create --username NAME --nickname DISPLAY_NAME")
 		os.Exit(2)

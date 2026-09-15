@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 
 export interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   description?: string;
 }
 
@@ -24,12 +24,16 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
             {...props}
           />
         </div>
-        <div className="ml-3 text-sm">
-          <label htmlFor={inputId} className="font-medium text-gray-700 select-none cursor-pointer">
-            {label}
-          </label>
-          {description && <p className="text-gray-500 text-xs mt-0.5">{description}</p>}
-        </div>
+        {(label || description) && (
+          <div className="ml-3 text-sm">
+            {label && (
+              <label htmlFor={inputId} className="font-medium text-gray-700 select-none cursor-pointer">
+                {label}
+              </label>
+            )}
+            {description && <p className="text-gray-500 text-xs mt-0.5">{description}</p>}
+          </div>
+        )}
       </div>
     );
   }

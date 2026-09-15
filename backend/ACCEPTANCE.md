@@ -1,28 +1,15 @@
-# Backend acceptance
+# 后端业务验收
 
-Validation date: 2026-09-07. The dedicated database is defined by `compose.test.yml`; no existing business database was used.
+当前 runtime 实现的验收范围：
 
-## Passed
+- `/api/v1` 下的认证、个人中心、用户/冻结管理、商家、VPS、库存只读、设置和看板路由均连接真实 service 与 PostgreSQL/Redis 依赖。
+- AT/RT、CSRF、当前角色/邮箱/token_version 校验、冻结缓存回源、密码变更令牌撤销已形成闭环。
+- 邮箱验证码和找回密码使用安全随机码、哈希、10 分钟有效期、60 秒冷却、5 次错误上限和一次性消费；API 不回传验证码。
+- 商家和 VPS 支持真实录入、编辑、筛选、分页、公开可见性及软删除约束；新套餐不创建库存记录。
+- 无库存记录返回未知且过期；三级采集许可可以保存，`collector_implemented` 固定为 `false`。
+- 看板统计真实数据库数据，包含未删除的停用商家/VPS，没有库存行的套餐计入未知。
+- 迁移与首个管理员命令可实际执行；默认不自动迁移、不 seed、不创建演示账号。
 
-- OpenAPI 3.1 YAML parses successfully; 37 paths cover every v1 route in `03-api.md`.
-- `go test ./... -count=1` passes with isolated PostgreSQL schemas; `go vet ./...` passes.
-- PostgreSQL constraints, unique keys, null/zero updates and transaction rollback.
-- Argon2id, Access/Refresh type separation, CSRF, current database role/session checks and multi-session listing/revocation.
-- Strict refresh rotation: one concurrent winner; replay commits session revocation and returns 401/200010.
-- SQL comment search, anonymous public projection, five-level model, per-parent signed cursor, placeholders and author/admin deletion rules.
-- Admin CRUD, current-role authorization, last-enabled-admin serialization, settings transaction and monitor config version conflict.
-- Worker lease competition/reclaim safety, stale result rejection and MockCollector results 1/2/3.
-- Read-only comparison with the real frontend request modules and TypeScript DTOs found no contract mismatch.
+明确未实现并保留给维护者的范围：网页采集、库存观测写入、采集调度、库存消息消费与确认。启用 `WORKER_ENABLED=true` 会安全返回 HTTP/业务层未实现错误，不读取或确认消息。
 
-## Local integration accounts
-
-After starting `compose.test.yml`, the currently initialized test database on `127.0.0.1:55432` contains:
-
-- administrator: `integration_admin` / `Admin-Integration-2026!`
-- normal user: `integration_user` / `User-Integration-2026!`
-
-These are deliberately local integration credentials, not production defaults. Re-running migration down/up removes them. The disabled `demo_*` seed fixtures remain non-login history records.
-
-## Deferred by the documented MVP boundary
-
-MySQL migrations/driver, Elasticsearch/outbox, real merchant HTTP collectors, stock history, email/notification delivery, shared distributed rate limiting and a persistent audit table are not implemented. The application rejects unsupported search/database modes rather than silently claiming support.
+无依赖单元测试通过不代表 runtime 集成已通过。完整验收需设置 `TEST_DATABASE_URL` 和 `TEST_REDIS_ADDR` 运行 `TestRuntimeRouterFlows`；具体命令见 `README.md`。

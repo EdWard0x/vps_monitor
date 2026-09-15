@@ -1,4 +1,4 @@
-import { Envelope } from '@/types/api';
+import { Envelope } from '@/types/common';
 import { BusinessCode } from '@/types/error';
 import { AppError } from './errors';
 import { getAccessToken, requestTokenRefresh, setAccessToken } from './token';
@@ -13,12 +13,26 @@ export interface RequestOptions extends RequestInit {
 
 const DEFAULT_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
-// 认证失效事件分发，通知 UI 层切换为未登录
+// 认证与身份事件通知
 export const AUTH_UNAUTHORIZED_EVENT = 'vps:auth:unauthorized';
+export const AUTH_FROZEN_EVENT = 'vps:auth:frozen';
+export const AUTH_REVOKED_EVENT = 'vps:auth:revoked';
 
 function notifyUnauthorized() {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+  }
+}
+
+function notifyFrozen() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_FROZEN_EVENT));
+  }
+}
+
+function notifyRevoked() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(AUTH_REVOKED_EVENT));
   }
 }
 
@@ -35,7 +49,8 @@ export async function apiRequest<T = unknown>(
     ...fetchInit
   } = options;
 
-  const url = path.startsWith('http') ? path : `${DEFAULT_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  const rawUrl = path.startsWith('http') ? path : `${DEFAULT_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  const url = typeof window === 'undefined' && !rawUrl.startsWith('http') ? `http://localhost${rawUrl}` : rawUrl;
   const headers = new Headers(customHeaders);
 
   if (!headers.has('Accept')) {
@@ -51,10 +66,12 @@ export async function apiRequest<T = unknown>(
   }
 
   // 2. 自动挂载 CSRF Token（认证相关写请求必须）
-  const isAuthWrite = path.includes('/auth/login') ||
+  const isAuthWrite =
+    path.includes('/auth/login') ||
     path.includes('/auth/register') ||
     path.includes('/auth/refresh') ||
-    path.includes('/auth/logout');
+    path.includes('/auth/logout') ||
+    path.includes('/auth/password-reset');
 
   if (isAuthWrite && !skipCsrf) {
     try {
@@ -74,7 +91,6 @@ export async function apiRequest<T = unknown>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  // 若外界已传 signal，联动取消
   if (fetchInit.signal) {
     fetchInit.signal.addEventListener('abort', () => controller.abort());
   }
@@ -114,12 +130,15 @@ export async function apiRequest<T = unknown>(
   }
 
   const statusCode = resp.status;
-  const businessCode = data && typeof data.code === 'number' ? data.code : BusinessCode.INTERNAL_ERROR;
-  const message = data?.message || (statusCode >= 500 ? '服务暂时异常，请稍后重试' : '请求失败');
+  let businessCode = data && typeof data.code === 'number' ? data.code : BusinessCode.INTERNAL_ERROR;
+  if (statusCode === 501 && businessCode === BusinessCode.INTERNAL_ERROR) {
+    businessCode = BusinessCode.NOT_IMPLEMENTED;
+  }
+  const message = data?.message || (statusCode === 501 ? '该功能尚未实现' : statusCode >= 500 ? '服务暂时异常，请稍后重试' : '请求失败');
   const requestId = data?.request_id;
   const errors = data?.errors;
 
-  // 6. 受控 Token 刷新处理 (仅 401 且 code 为 200003 时自动触发一次刷新重试)
+  // 6. 受控 Token 刷新处理 (仅 401 且 code 为 200003 ACCESS_EXPIRED 时自动触发一次刷新重试)
   if (statusCode === 401 && businessCode === BusinessCode.ACCESS_EXPIRED && !_isRetry) {
     const refreshedToken = await requestTokenRefresh(DEFAULT_BASE_URL);
     if (refreshedToken) {
@@ -128,16 +147,18 @@ export async function apiRequest<T = unknown>(
         _isRetry: true,
       });
     } else {
-      // 刷新失败，会话失效
       setAccessToken(null);
       notifyUnauthorized();
     }
+  } else if (businessCode === BusinessCode.USER_FROZEN) {
+    setAccessToken(null);
+    notifyFrozen();
+  } else if (businessCode === BusinessCode.TOKEN_REVOKED || businessCode === BusinessCode.INVALID_TOKEN) {
+    setAccessToken(null);
+    notifyRevoked();
   } else if (statusCode === 401) {
-    // 其他 401 (例如会话已撤销 200004、重放撤销 200010、未登录 200002 等)
-    if (businessCode === BusinessCode.SESSION_REVOKED || businessCode === BusinessCode.REFRESH_REUSED) {
-      setAccessToken(null);
-      notifyUnauthorized();
-    }
+    setAccessToken(null);
+    notifyUnauthorized();
   }
 
   // 7. CSRF 校验失败时重置内存中的 CSRF 缓存

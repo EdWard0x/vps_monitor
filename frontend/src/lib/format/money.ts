@@ -1,5 +1,4 @@
-// 金额与周期格式化工具：严格保留定点字符串，不进行浮点累加或转换
-import { BillingPeriod } from '@/types/api';
+import { BillingPeriod } from '@/types';
 
 export const BILLING_PERIOD_LABELS: Record<BillingPeriod, string> = {
   monthly: '月',

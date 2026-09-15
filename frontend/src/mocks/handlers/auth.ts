@@ -1,10 +1,21 @@
 import { http, HttpResponse } from 'msw';
-import { mockUsers, mockSessions, MockUserRecord } from '../data';
+import { mockUsers, MockUserRecord } from '../data';
+import { normalizeMail } from '@/lib/format/mail';
 
-const BASE_URL = '/api/v1';
+const BASE_URL = typeof window !== 'undefined' ? '/api/v1' : '*/api/v1';
 
 let currentMockUserId: string | null = null;
-let currentMockSessionId: string | null = null;
+
+export interface MockResetRecord {
+  resetId: string;
+  mail: string;
+  code: string;
+  userId?: string;
+  attempts: number;
+  expiresAt: number;
+}
+
+export const mockResetRequests: Map<string, MockResetRecord> = new Map();
 
 export function setCurrentMockUser(userId: string | null) {
   currentMockUserId = userId;
@@ -22,7 +33,7 @@ export const authHandlers = [
       {
         code: 0,
         message: 'ok',
-        data: { csrf_token: 'mock_csrf_valid_token_12345' },
+        data: { token: 'mock_csrf_valid_token_12345' },
         request_id: `req_${Date.now()}`,
       },
       {
@@ -38,11 +49,11 @@ export const authHandlers = [
     const body = (await request.json()) as any;
     const { username, nickname, password } = body;
 
-    if (!username || !/^[a-z0-9_]{4,32}$/.test(username)) {
+    if (!username || !/^[a-z0-9][a-z0-9_]{2,63}$/.test(username)) {
       return HttpResponse.json(
         {
           code: 100001,
-          message: '用户名须为 4~32 位小写字母、数字或下划线',
+          message: '用户名须为 3~64 位，以小写字母或数字开头，仅包含小写字母、数字或下划线',
           data: null,
           request_id: `req_${Date.now()}`,
           errors: [{ field: 'username', reason: 'invalid_format' }],
@@ -66,13 +77,12 @@ export const authHandlers = [
       );
     }
 
-    const pwdRunes = password ? [...password].length : 0;
     const pwdBytes = password ? new TextEncoder().encode(password).length : 0;
-    if (!password || pwdRunes < 12 || pwdRunes > 128 || pwdBytes > 512) {
+    if (!password || pwdBytes < 8 || pwdBytes > 72) {
       return HttpResponse.json(
         {
           code: 100001,
-          message: '密码长度须在 12~128 个字符之间',
+          message: '密码的 UTF-8 长度须在 8~72 字节之间',
           data: null,
           request_id: `req_${Date.now()}`,
           errors: [{ field: 'password', reason: 'invalid_length' }],
@@ -85,7 +95,7 @@ export const authHandlers = [
     const exists = mockUsers.some((u) => u.username === username.toLowerCase().trim());
     if (exists) {
       return HttpResponse.json(
-        { code: 200007, message: '用户名已被使用', data: null, request_id: `req_${Date.now()}` },
+        { code: 300002, message: '用户名已被使用', data: null, request_id: `req_${Date.now()}` },
         { status: 409 }
       );
     }
@@ -97,6 +107,10 @@ export const authHandlers = [
       password,
       role: 'user',
       enabled: true,
+      mail: null,
+      mail_verified: false,
+      mail_verified_at: null,
+      mail_required: false,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -107,10 +121,10 @@ export const authHandlers = [
       {
         code: 0,
         message: 'ok',
-        data: { user: userSelf },
+        data: userSelf,
         request_id: `req_${Date.now()}`,
       },
-      { status: 201 }
+      { status: 200 }
     );
   }),
 
@@ -131,16 +145,6 @@ export const authHandlers = [
     }
 
     currentMockUserId = user.id;
-    currentMockSessionId = `mock_session_${Date.now()}`;
-
-    mockSessions.push({
-      id: currentMockSessionId,
-      user_id: user.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      refresh_expires_at: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
-      is_current: true,
-    });
 
     const { password: _, ...userSelf } = user;
 
@@ -158,7 +162,7 @@ export const authHandlers = [
       },
       {
         headers: {
-          'Set-Cookie': `vps_refresh=mock_refresh_${currentMockSessionId}; Path=/; HttpOnly; SameSite=Lax`,
+          'Set-Cookie': `vps_refresh=mock_refresh_${user.id}_${Date.now()}; Path=/; HttpOnly; SameSite=Lax`,
         },
       }
     );
@@ -188,7 +192,6 @@ export const authHandlers = [
   // 5. POST /auth/logout
   http.post(`${BASE_URL}/auth/logout`, () => {
     currentMockUserId = null;
-    currentMockSessionId = null;
     return HttpResponse.json({
       code: 0,
       message: 'ok',
@@ -199,20 +202,145 @@ export const authHandlers = [
 
   // 6. POST /auth/logout-all
   http.post(`${BASE_URL}/auth/logout-all`, () => {
-    if (currentMockUserId) {
-      mockSessions.forEach((s) => {
-        if (s.user_id === currentMockUserId) {
-          s.revoked_at = new Date().toISOString();
-        }
-      });
-    }
     currentMockUserId = null;
-    currentMockSessionId = null;
     return HttpResponse.json({
       code: 0,
       message: 'ok',
       data: null,
       request_id: `req_${Date.now()}`,
     });
+  }),
+
+  // 7. POST /auth/password-reset/code
+  http.post(`${BASE_URL}/auth/password-reset/code`, async ({ request }) => {
+    const body = (await request.json()) as any;
+    const { mail } = body || {};
+
+    const { valid, normalized, error } = normalizeMail(mail || '');
+    if (!valid) {
+      return HttpResponse.json(
+        {
+          code: 100001,
+          message: error || '邮箱格式不合法',
+          data: null,
+          request_id: `req_${Date.now()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const matchedUser = mockUsers.find(
+      (u) => u.mail && u.mail.toLowerCase() === normalized && u.mail_verified && u.enabled
+    );
+    const resetId = `mock_reset_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const code = '123456';
+    mockResetRequests.set(resetId, {
+      resetId,
+      mail: normalized,
+      code,
+      userId: matchedUser?.id,
+      attempts: 0,
+      expiresAt: Date.now() + 600 * 1000,
+    });
+
+    return HttpResponse.json(
+      {
+        code: 0,
+        message: 'ok',
+        data: {
+          reset_id: resetId,
+          expires_in: 600,
+          retry_after: 60,
+          message: '如果该邮箱已绑定可用账号，将收到密码重置验证码。',
+        },
+        request_id: `req_${Date.now()}`,
+      },
+      { status: 202 }
+    );
+  }),
+
+  // 8. POST /auth/password-reset/confirm
+  http.post(`${BASE_URL}/auth/password-reset/confirm`, async ({ request }) => {
+    const body = (await request.json()) as any;
+    const { reset_id, code, new_password } = body || {};
+
+    if (!reset_id || !code || !/^\d{6}$/.test(code)) {
+      return HttpResponse.json(
+        {
+          code: 200016,
+          message: '重置请求或验证码错误、过期、已失效或账号状态已改变',
+          data: null,
+          request_id: `req_${Date.now()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const pwdBytes = new_password ? new TextEncoder().encode(new_password).length : 0;
+    if (!new_password || pwdBytes < 8 || pwdBytes > 72) {
+      return HttpResponse.json(
+        {
+          code: 100001,
+          message: '密码的 UTF-8 长度须在 8~72 字节之间',
+          data: null,
+          request_id: `req_${Date.now()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const reqRecord = mockResetRequests.get(reset_id);
+    if (!reqRecord || reqRecord.expiresAt < Date.now() || reqRecord.attempts >= 5 || !reqRecord.userId) {
+      return HttpResponse.json(
+        {
+          code: 200016,
+          message: '重置请求或验证码错误、过期、已失效或账号状态已改变',
+          data: null,
+          request_id: `req_${Date.now()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    if (reqRecord.code !== code) {
+      reqRecord.attempts += 1;
+      return HttpResponse.json(
+        {
+          code: 200016,
+          message: '重置请求或验证码错误、过期、已失效或账号状态已改变',
+          data: null,
+          request_id: `req_${Date.now()}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // 成功完成：更新 mock 用户密码并撤销所有会话
+    const user = mockUsers.find((u) => u.id === reqRecord.userId);
+    if (user) {
+      user.password = new_password;
+      user.updated_at = new Date().toISOString();
+    }
+
+    if (currentMockUserId === reqRecord.userId) {
+      currentMockUserId = null;
+    }
+
+    mockResetRequests.delete(reset_id);
+
+    return HttpResponse.json(
+      {
+        code: 0,
+        message: 'ok',
+        data: null,
+        request_id: `req_${Date.now()}`,
+      },
+      {
+        status: 200,
+        headers: {
+          'Set-Cookie': 'vps_refresh=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+        },
+      }
+    );
   }),
 ];

@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Merchant, Vps } from '@/types/api';
-import { apiClient } from '@/lib/http/client';
+import { Merchant } from '@/types/merchant';
+import { VPS } from '@/types/vps';
+import * as merchantApi from '@/api/merchant';
+import * as vpsApi from '@/api/vps';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { StockBadge } from '@/components/common/StockBadge';
-import { formatPrice } from '@/lib/format/money';
-import { formatMemory, formatDisk, formatTransfer } from '@/lib/format/specs';
+import { VpsCard } from '@/features/vps/VpsCard';
+import { NotImplementedCard } from '@/pages/ErrorPages';
+import { isAppError } from '@/lib/http/errors';
+import { BusinessCode } from '@/types/error';
 import { Store, Globe, ExternalLink, ArrowLeft, Server } from 'lucide-react';
 import { isSafeExternalUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -15,27 +18,69 @@ import { Button } from '@/components/ui/Button';
 export const MerchantDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [vpsList, setVpsList] = useState<Vps[]>([]);
+  const [vpsList, setVpsList] = useState<VPS[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNotImplemented, setIsNotImplemented] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
+    setError(null);
+    setIsNotImplemented(false);
+
     Promise.all([
-      apiClient.get<Merchant>(`/merchants/${id}`),
-      apiClient.get<{ items: Vps[] }>(`/vps?merchant_id=${id}&page=1&page_size=100`),
+      merchantApi.getMerchant(id),
+      vpsApi.listVPS({ merchant_id: id, page: 1, page_size: 100 }),
     ])
       .then(([mRes, vRes]) => {
         setMerchant(mRes.data);
         setVpsList(vRes.data.items);
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
+          setIsNotImplemented(true);
+        } else {
+          setError(err instanceof Error ? err.message : '加载商家详情与套餐失败');
+        }
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <LoadingSpinner label="正在拉取商家详情与套餐..." />;
-  if (error || !merchant) return <ErrorState message={error || '商家不存在或已停用'} />;
+
+  if (isNotImplemented) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/merchants"
+          className="inline-flex items-center text-xs text-gray-500 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+          返回商家列表
+        </Link>
+        <NotImplementedCard
+          title="商家详情与套餐查询尚未实现 (HTTP 501)"
+          description="后端端点 GET /api/v1/merchant/info 及套餐列表正在重构中。"
+        />
+      </div>
+    );
+  }
+
+  if (error || !merchant) {
+    return (
+      <div className="space-y-4">
+        <Link
+          to="/merchants"
+          className="inline-flex items-center text-xs text-gray-500 hover:text-gray-900 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+          返回商家列表
+        </Link>
+        <ErrorState title="加载失败" description={error || '商家不存在或已下架'} />
+      </div>
+    );
+  }
 
   const safeWebsite = isSafeExternalUrl(merchant.website_url);
 
@@ -50,7 +95,7 @@ export const MerchantDetailPage: React.FC = () => {
       </Link>
 
       {/* 商家资料卡片 */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-3 mb-1">
             <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
@@ -87,49 +132,11 @@ export const MerchantDetailPage: React.FC = () => {
         </h2>
 
         {vpsList.length === 0 ? (
-          <EmptyState title="该商家暂无在售套餐" description="当前该商家下未配置任何上架商品。" />
+          <EmptyState title="该商家暂无在售套餐" description="当前该商家下未查询到已上架的 VPS 商品。" />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {vpsList.map((vps) => (
-              <div
-                key={vps.id}
-                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-brand-300 transition-all flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <Link
-                      to={`/vps/${vps.id}`}
-                      className="font-bold text-gray-900 hover:text-brand-600 transition-colors"
-                    >
-                      {vps.name}
-                    </Link>
-                    <StockBadge stock={vps.stock} />
-                  </div>
-
-                  <p className="text-xs text-gray-500 line-clamp-2 mb-3">
-                    {vps.description || '暂无描述'}
-                  </p>
-
-                  <div className="flex items-center space-x-3 text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg mb-3">
-                    <span>{vps.cpu_cores} 核 / {formatMemory(vps.memory_mb)}</span>
-                    <span>·</span>
-                    <span>{formatDisk(vps.disk_gb, vps.disk_type)}</span>
-                    <span>·</span>
-                    <span>流量: {formatTransfer(vps.transfer_gb)}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-gray-100 text-xs">
-                  <span className="text-base font-bold text-brand-700">
-                    {formatPrice(vps.price_amount, vps.currency, vps.billing_period)}
-                  </span>
-                  <Link to={`/vps/${vps.id}`}>
-                    <Button variant="primary" size="sm">
-                      详情与评论
-                    </Button>
-                  </Link>
-                </div>
-              </div>
+              <VpsCard key={vps.id} vps={vps} />
             ))}
           </div>
         )}

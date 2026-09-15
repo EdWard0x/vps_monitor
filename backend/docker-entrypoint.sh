@@ -1,34 +1,26 @@
 #!/bin/sh
-set -u
+set -eu
 
-if [ "${MIGRATE_ON_START:-true}" = "true" ]; then
-  if ! /app/migrate up --file /app/migrations/001_init.up.sql; then
-    echo "database migration failed" >&2
-    exit 1
-  fi
+# 默认不迁移数据；显式启用时，失败会阻止容器启动。
+if [ "${MIGRATE_ON_START:-false}" = "true" ]; then
+  /app/migrate -direction up -dir /app/migrations
 fi
 
-/app/worker &
-worker_pid=$!
 /app/api &
 api_pid=$!
 
+worker_pid=""
+if [ "${START_WORKER:-false}" = "true" ]; then
+  /app/worker &
+  worker_pid=$!
+fi
+
 shutdown() {
   trap - TERM INT
-  kill -TERM "$api_pid" "$worker_pid" 2>/dev/null || true
+  kill -TERM "$api_pid" 2>/dev/null || true
+  if [ -n "$worker_pid" ]; then kill -TERM "$worker_pid" 2>/dev/null || true; fi
   wait "$api_pid" 2>/dev/null || true
-  wait "$worker_pid" 2>/dev/null || true
-  exit 0
+  if [ -n "$worker_pid" ]; then wait "$worker_pid" 2>/dev/null || true; fi
 }
-
 trap shutdown TERM INT
-
-while kill -0 "$api_pid" 2>/dev/null && kill -0 "$worker_pid" 2>/dev/null; do
-  sleep 2
-done
-
-echo "api or worker exited unexpectedly; stopping backend container" >&2
-kill -TERM "$api_pid" "$worker_pid" 2>/dev/null || true
-wait "$api_pid" 2>/dev/null || true
-wait "$worker_pid" 2>/dev/null || true
-exit 1
+wait "$api_pid"

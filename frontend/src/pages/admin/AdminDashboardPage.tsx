@@ -1,36 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Dashboard } from '@/types/api';
-import { apiClient } from '@/lib/http/client';
-import { formatDate } from '@/lib/format/date';
+import { DashboardSummary } from '@/types/dashboard';
+import * as dashboardApi from '@/api/dashboard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { NotImplementedCard } from '@/pages/ErrorPages';
+import { isAppError } from '@/lib/http/errors';
+import { BusinessCode } from '@/types/error';
+import { Button } from '@/components/ui/Button';
 import {
   LayoutDashboard,
   Store,
   Server,
   Users,
-  MessageSquare,
   CheckCircle2,
-  XCircle,
   HelpCircle,
-  Clock,
-  Activity,
   ArrowRight,
+  Snowflake,
+  Plus,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 export const AdminDashboardPage: React.FC = () => {
-  const [data, setData] = useState<Dashboard | null>(null);
+  const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isNotImplemented, setIsNotImplemented] = useState(false);
 
   const fetchDashboard = () => {
     setLoading(true);
     setError(null);
-    apiClient
-      .get<Dashboard>('/admin/dashboard')
+    setIsNotImplemented(false);
+
+    dashboardApi
+      .adminGetDashboard()
       .then((res) => setData(res.data))
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
+          setIsNotImplemented(true);
+        } else {
+          setError(err instanceof Error ? err.message : '加载看板统计失败');
+        }
+      })
       .finally(() => setLoading(false));
   };
 
@@ -38,152 +49,159 @@ export const AdminDashboardPage: React.FC = () => {
     fetchDashboard();
   }, []);
 
-  if (loading) return <LoadingSpinner label="正在读取管理员仪表盘指标..." />;
-  if (error || !data) return <ErrorState message={error || '加载仪表盘失败'} onRetry={fetchDashboard} />;
-
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center">
-          <LayoutDashboard className="w-6 h-6 text-brand-600 mr-2.5" />
-          系统总览看板
-        </h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-1">
-          实时查看商家、商品、监控队列积压及评论审核核心运行指标
-        </p>
-      </div>
-
-      {/* 核心统计卡片网格 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* 商家数 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">合作商家总数</span>
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-              <Store className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-extrabold text-gray-900">{data.merchant_count}</span>
-            <Link to="/admin/merchants" className="text-xs text-brand-600 hover:underline inline-flex items-center">
-              管理 <ArrowRight className="w-3 h-3 ml-0.5" />
-            </Link>
-          </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl flex items-center">
+            <LayoutDashboard className="w-7 h-7 text-brand-600 mr-3" />
+            系统总览看板
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            实时查看合作商家、VPS 套餐、注册用户及库存核心指标
+          </p>
         </div>
 
-        {/* VPS 套餐数 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">已登记套餐</span>
-            <div className="p-2 rounded-xl bg-purple-50 text-purple-600">
-              <Server className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-extrabold text-gray-900">{data.vps_count}</span>
-            <Link to="/admin/vps" className="text-xs text-brand-600 hover:underline inline-flex items-center">
-              管理 <ArrowRight className="w-3 h-3 ml-0.5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* 用户数 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">注册用户总数</span>
-            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <div>
-              <span className="text-2xl font-extrabold text-gray-900">{data.user_count}</span>
-              <span className="text-xs text-gray-400 ml-2">({data.enabled_user_count} 正常)</span>
-            </div>
-            <Link to="/admin/users" className="text-xs text-brand-600 hover:underline inline-flex items-center">
-              管理 <ArrowRight className="w-3 h-3 ml-0.5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* 待审核评论 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-gray-400">待审核评论</span>
-            <div className="p-2 rounded-xl bg-amber-50 text-amber-600">
-              <MessageSquare className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between">
-            <span className="text-2xl font-extrabold text-amber-600">{data.pending_comment_count}</span>
-            <Link to="/admin/comments?visibility=2" className="text-xs text-brand-600 hover:underline inline-flex items-center">
-              立即审核 <ArrowRight className="w-3 h-3 ml-0.5" />
-            </Link>
-          </div>
+        {/* 快捷录入入口：方便从空数据库开始操作 */}
+        <div className="flex items-center flex-wrap gap-2">
+          <Link to="/admin/merchants?action=create">
+            <Button variant="primary" size="sm">
+              <Plus className="w-4 h-4 mr-1.5" />
+              添加商家
+            </Button>
+          </Link>
+          <Link to="/admin/vps?action=create">
+            <Button variant="outline" size="sm">
+              <Plus className="w-4 h-4 mr-1.5" />
+              添加 VPS
+            </Button>
+          </Link>
+          <Link to="/admin/settings">
+            <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
+              <SettingsIcon className="w-4 h-4 mr-1.5" />
+              站点设置
+            </Button>
+          </Link>
         </div>
       </div>
 
-      {/* 监控与库存状态分区 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 三态库存健康状况 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
-            <Activity className="w-4 h-4 text-brand-600 mr-2" />
-            上架商品库存观测分布
-          </h2>
-
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100">
-              <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
-              <div className="text-2xl font-black text-emerald-700">{data.stock_counts.in_stock}</div>
-              <div className="text-xs text-emerald-600 font-medium mt-1">有货商品</div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-rose-50/60 border border-rose-100">
-              <XCircle className="w-6 h-6 text-rose-600 mx-auto mb-1.5" />
-              <div className="text-2xl font-black text-rose-700">{data.stock_counts.out_of_stock}</div>
-              <div className="text-xs text-rose-600 font-medium mt-1">缺货商品</div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-amber-50/60 border border-amber-100">
-              <HelpCircle className="w-6 h-6 text-amber-600 mx-auto mb-1.5" />
-              <div className="text-2xl font-black text-amber-700">{data.stock_counts.unknown}</div>
-              <div className="text-xs text-amber-600 font-medium mt-1">状态无法识别</div>
-            </div>
-          </div>
-        </div>
-
-        {/* 监控积压与时钟 */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900 mb-4 flex items-center">
-              <Clock className="w-4 h-4 text-brand-600 mr-2" />
-              采集监控运行状态
-            </h2>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-                <span className="text-gray-500">到期积压任务数（Due Tasks）</span>
-                <span className="font-bold text-gray-800 text-sm">
-                  {data.monitor_due_count} 项
-                </span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
-                <span className="text-gray-500">全库最近完成检查时间</span>
-                <span className="font-bold text-gray-800 text-sm">
-                  {formatDate(data.last_checked_at)}
-                </span>
+      {isNotImplemented ? (
+        <NotImplementedCard
+          title="看板统计接口尚未实现 (HTTP 501)"
+          description="后端端点 GET /api/v1/admin/dashboard/info 正在重构中，待后端接入后即可实时汇总系统指标。"
+        />
+      ) : loading ? (
+        <LoadingSpinner label="正在读取管理员看板指标..." />
+      ) : error || !data ? (
+        <ErrorState title="加载失败" description={error || '加载看板失败'} onRetry={fetchDashboard} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* 合作商家数 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                合作商家总数
+              </span>
+              <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+                <Store className="w-4 h-4" />
               </div>
             </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-gray-900">{data.merchant_count}</span>
+              <Link
+                to="/admin/merchants"
+                className="text-xs text-brand-600 hover:underline inline-flex items-center font-medium"
+              >
+                商家管理 <ArrowRight className="w-3 h-3 ml-0.5" />
+              </Link>
+            </div>
           </div>
 
-          <div className="pt-4 mt-4 border-t border-gray-100 text-right">
-            <Link to="/admin/monitors" className="text-xs text-brand-600 hover:underline inline-flex items-center font-semibold">
-              前往监控任务调度中心 <ArrowRight className="w-3.5 h-3.5 ml-1" />
-            </Link>
+          {/* VPS 套餐数 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                VPS 套餐总数
+              </span>
+              <div className="p-2.5 rounded-xl bg-purple-50 text-purple-600">
+                <Server className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-gray-900">{data.vps_count}</span>
+              <Link
+                to="/admin/vps"
+                className="text-xs text-brand-600 hover:underline inline-flex items-center font-medium"
+              >
+                套餐管理 <ArrowRight className="w-3 h-3 ml-0.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* 用户总数 & 冻结数 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                注册用户总数
+              </span>
+              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <div>
+                <span className="text-3xl font-extrabold text-gray-900">{data.user_count}</span>
+                {data.frozen_user_count > 0 && (
+                  <span className="ml-2 text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full inline-flex items-center font-medium">
+                    <Snowflake className="w-3 h-3 mr-0.5" />
+                    {data.frozen_user_count} 冻结
+                  </span>
+                )}
+              </div>
+              <Link
+                to="/admin/users"
+                className="text-xs text-brand-600 hover:underline inline-flex items-center font-medium"
+              >
+                用户管理 <ArrowRight className="w-3 h-3 ml-0.5" />
+              </Link>
+            </div>
+          </div>
+
+          {/* 有货套餐 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                当前有货套餐
+              </span>
+              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-emerald-600">{data.in_stock_count}</span>
+              <span className="text-xs text-gray-400">实时库存</span>
+            </div>
+          </div>
+
+          {/* 未知状态套餐 */}
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                库存状态未知
+              </span>
+              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
+                <HelpCircle className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-3 flex items-baseline justify-between">
+              <span className="text-3xl font-extrabold text-amber-600">
+                {data.unknown_stock_count}
+              </span>
+              <span className="text-xs text-gray-400">待外部同步</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

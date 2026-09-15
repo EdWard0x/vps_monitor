@@ -1,137 +1,173 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { User, LoginResult, RegisterRequest } from '@/types/api';
-import { apiClient, AUTH_UNAUTHORIZED_EVENT } from '@/lib/http/client';
+import { AccountUser, RegisterInput, LoginInput } from '@/types/auth';
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  AUTH_FROZEN_EVENT,
+  AUTH_REVOKED_EVENT,
+} from '@/lib/http/client';
 import { setAccessToken, requestTokenRefresh } from '@/lib/http/token';
 import { ensureCsrfToken } from '@/lib/http/csrf';
+import { isAppError } from '@/lib/http/errors';
+import { BusinessCode } from '@/types/error';
+import * as authApi from '@/api/auth';
+import * as userApi from '@/api/user';
+
+export type AuthStatus = 'loading' | 'anonymous' | 'authenticated' | 'unavailable';
 
 interface AuthContextType {
-  user: User | null;
+  status: AuthStatus;
+  user: AccountUser | null;
   loading: boolean;
   isAdmin: boolean;
-  login: (username: string, password: string) => Promise<User>;
-  register: (req: RegisterRequest) => Promise<User>;
+  login: (input: LoginInput) => Promise<AccountUser>;
+  register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
-  logoutAll: () => Promise<void>;
-  updateUser: (user: User) => void;
-  refreshProfile: () => Promise<User | null>;
+  updateUser: (user: AccountUser) => void;
+  reloadProfile: () => Promise<AccountUser | null>;
+  frozenAlert: string | null;
+  clearFrozenAlert: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<AuthStatus>('loading');
+  const [user, setUser] = useState<AccountUser | null>(null);
+  const [frozenAlert, setFrozenAlert] = useState<string | null>(null);
 
-  // 初始化认证状态：先拿 CSRF，再尝试静默 refresh 换取内存 Access Token，最后拿 /me
+  // 初始化认证状态：获取 CSRF，尝试静默 refresh 恢复 AT，再拉取 /me/info
   const initAuth = useCallback(async () => {
     try {
-      setLoading(true);
+      setStatus('loading');
       await ensureCsrfToken();
-      // 尝试静默刷新以恢复登录会话
       const token = await requestTokenRefresh();
       if (token) {
-        const meRes = await apiClient.get<User>('/me');
-        setUser(meRes.data);
+        try {
+          const meRes = await userApi.getMe();
+          setUser(meRes.data);
+          setStatus('authenticated');
+        } catch (err) {
+          if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
+            setStatus('unavailable');
+          } else {
+            setUser(null);
+            setStatus('anonymous');
+          }
+        }
       } else {
         setUser(null);
+        setStatus('anonymous');
       }
-    } catch {
-      setUser(null);
+    } catch (err) {
+      if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
+        setStatus('unavailable');
+      } else {
+        setUser(null);
+        setStatus('anonymous');
+      }
       setAccessToken(null);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     initAuth();
 
-    // 监听 401 彻底未授权事件
     const handleUnauthorized = () => {
       setUser(null);
+      setStatus('anonymous');
+    };
+
+    const handleFrozen = () => {
+      setUser(null);
+      setStatus('anonymous');
+      setFrozenAlert('账号已被冻结，请联系管理员');
+    };
+
+    const handleRevoked = () => {
+      setUser(null);
+      setStatus('anonymous');
+      setFrozenAlert('登录凭证已失效，请重新登录');
     };
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    window.addEventListener(AUTH_FROZEN_EVENT, handleFrozen);
+    window.addEventListener(AUTH_REVOKED_EVENT, handleRevoked);
+
     return () => {
       window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+      window.removeEventListener(AUTH_FROZEN_EVENT, handleFrozen);
+      window.removeEventListener(AUTH_REVOKED_EVENT, handleRevoked);
     };
   }, [initAuth]);
 
-  // 登录
-  const login = async (username: string, password: string): Promise<User> => {
-    const res = await apiClient.post<LoginResult>('/auth/login', {
-      username: username.toLowerCase().trim(),
-      password,
+  // 登录：调用 API，保存 AT 到内存，设置用户与 authenticated 状态
+  const login = async (input: LoginInput): Promise<AccountUser> => {
+    const res = await authApi.login({
+      username: input.username.toLowerCase().trim(),
+      password: input.password,
     });
     setAccessToken(res.data.access_token);
     setUser(res.data.user);
+    setStatus('authenticated');
+    setFrozenAlert(null);
     return res.data.user;
   };
 
-  // 注册（注册后不自动登录）
-  const register = async (req: RegisterRequest): Promise<User> => {
-    const res = await apiClient.post<{ user: User }>('/auth/register', {
-      username: req.username.toLowerCase().trim(),
-      nickname: req.nickname.trim(),
-      password: req.password,
+  // 注册：调用 API，注册成功后不自动登录
+  const register = async (input: RegisterInput): Promise<void> => {
+    await authApi.register({
+      username: input.username.toLowerCase().trim(),
+      nickname: input.nickname.trim(),
+      password: input.password,
     });
-    return res.data.user;
   };
 
-  // 退出当前设备会话
+  // 退出：清理本地 AT 与状态，调用 API 清除 RT Cookie
   const logout = async (): Promise<void> => {
     try {
-      await apiClient.post('/auth/logout', {});
+      await authApi.logout();
     } catch {
       // 忽略登出网络失败
     } finally {
       setAccessToken(null);
       setUser(null);
+      setStatus('anonymous');
     }
   };
 
-  // 退出所有设备会话
-  const logoutAll = async (): Promise<void> => {
-    try {
-      await apiClient.post('/auth/logout-all', {});
-    } catch {
-      // 忽略登出网络失败
-    } finally {
-      setAccessToken(null);
-      setUser(null);
-    }
+  const updateUser = (updatedUser: AccountUser) => {
+    setUser(updatedUser);
   };
 
-  // 更新当前用户信息
-  const updateUser = (newUser: User) => {
-    setUser(newUser);
-  };
-
-  // 重新获取个人信息
-  const refreshProfile = async (): Promise<User | null> => {
+  const reloadProfile = async (): Promise<AccountUser | null> => {
     try {
-      const meRes = await apiClient.get<User>('/me');
-      setUser(meRes.data);
-      return meRes.data;
+      const res = await userApi.getMe();
+      setUser(res.data);
+      return res.data;
     } catch {
       return null;
     }
   };
 
-  const isAdmin = Boolean(user && user.role === 'admin' && user.enabled);
+  const clearFrozenAlert = () => setFrozenAlert(null);
+
+  const isAdmin = user?.role === 'admin';
+  const loading = status === 'loading';
 
   return (
     <AuthContext.Provider
       value={{
+        status,
         user,
         loading,
         isAdmin,
         login,
         register,
         logout,
-        logoutAll,
         updateUser,
-        refreshProfile,
+        reloadProfile,
+        frozenAlert,
+        clearFrozenAlert,
       }}
     >
       {children}

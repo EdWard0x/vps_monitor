@@ -2,72 +2,66 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"flag"
+	"encoding/json"
+	stdflag "flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"vpsmonitor/internal/infrastructure/database"
+
+	"vpsmonitor/config"
+	appflag "vpsmonitor/flag"
+	"vpsmonitor/initialize"
+	"vpsmonitor/service"
 )
 
-// main 执行建表或回退 SQL。它直接读取进程中的 DATABASE_URL，不加载 .env。
-// down 会删除初始化脚本建立的表；学习时先阅读 SQL，不要在已有数据上试跑。
 func main() {
-	// 本地开发可使用 .env；容器和生产环境通常直接注入环境变量。
-	//_ = godotenv.Load(".env")
-	if len(os.Args) < 2 || (os.Args[1] != "up" && os.Args[1] != "down") {
-		fmt.Fprintln(os.Stderr, "usage: migrate up|down [--file path]")
-		os.Exit(2)
+	command, err := parseCommand(os.Args[1:])
+	if err != nil {
+		exitError(err)
 	}
-	direction := os.Args[1]
-	fs := flag.NewFlagSet(direction, flag.ExitOnError)
-	file := fs.String("file", "", "SQL migration path")
-	_ = fs.Parse(os.Args[2:])
-	if *file == "" {
-		*file = locate(filepath.Join("..", "docs", "sql", "postgres", "001_init."+direction+".sql"))
+	cfg, err := config.Load()
+	if err != nil {
+		exitError(err)
 	}
-	b, e := os.ReadFile(*file)
-	if e != nil {
-		fmt.Println("reading migration file failed")
-		fatal(e)
+	if strings.TrimSpace(cfg.Database.URL) == "" {
+		exitError(fmt.Errorf("DATABASE_URL is required"))
 	}
-	migrationSQL := strings.TrimSpace(string(b))
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		fatal(fmt.Errorf("DATABASE_URL is required"))
+	_, rawDB, err := initialize.OpenDatabase(cfg.Database)
+	if err != nil {
+		exitError(fmt.Errorf("connect database: %w", err))
 	}
-	db, e := database.Open(context.Background(), dsn, 5, 2)
-	if e != nil {
-		fatal(e)
+	defer rawDB.Close()
+	result, err := appflag.RunMigrate(context.Background(), service.NewMigrationService(rawDB), command)
+	if err != nil {
+		exitError(err)
 	}
-	if direction == "up" {
-		var table sql.NullString
-		if e = db.Raw("SELECT to_regclass('public.schema_migrations')").Scan(&table).Error; e != nil {
-			fatal(e)
-		}
-		if table.Valid {
-			var count int64
-			if e = db.Raw("SELECT count(*) FROM schema_migrations WHERE version = ?", 1).Scan(&count).Error; e != nil {
-				fatal(e)
-			}
-			if count > 0 {
-				fmt.Println("migration 001 already applied")
-				return
-			}
-			fatal(fmt.Errorf("schema_migrations exists but version 1 is missing; manual inspection required"))
-		}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(result); err != nil {
+		exitError(err)
 	}
-	if e = db.Exec(migrationSQL).Error; e != nil {
-		fatal(e)
-	}
-	fmt.Printf("migration 001 %s complete\n", direction)
 }
-func locate(p string) string {
-	if _, e := os.Stat(p); e == nil {
-		return p
+
+func parseCommand(arguments []string) (appflag.MigrateCommand, error) {
+	set := stdflag.NewFlagSet("migrate", stdflag.ContinueOnError)
+	set.SetOutput(os.Stderr)
+	directory := set.String("dir", "migrations", "migration SQL directory")
+	directionFlag := set.String("direction", "", "up, down, or status (legacy form)")
+	direction := ""
+	if len(arguments) > 0 && !strings.HasPrefix(arguments[0], "-") {
+		direction = arguments[0]
+		arguments = arguments[1:]
 	}
-	alt := filepath.Join("docs", "sql", "postgres", filepath.Base(p))
-	return alt
+	if err := set.Parse(arguments); err != nil {
+		return appflag.MigrateCommand{}, err
+	}
+	if set.NArg() != 0 {
+		return appflag.MigrateCommand{}, fmt.Errorf("unexpected arguments: %s", strings.Join(set.Args(), " "))
+	}
+	if direction == "" {
+		direction = *directionFlag
+	}
+	return appflag.MigrateCommand{Direction: direction, Directory: *directory}, nil
 }
-func fatal(e error) { fmt.Fprintln(os.Stderr, "error:", e); os.Exit(1) }
+
+func exitError(err error) { fmt.Fprintln(os.Stderr, "migrate:", err); os.Exit(1) }

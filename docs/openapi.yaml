@@ -1,0 +1,762 @@
+openapi: 3.1.0
+info:
+  title: VPS Monitor API
+  version: 1.0.0
+  description: |
+    VPS Monitor 真实业务接口。所有业务响应使用统一包络，ID 为十进制字符串，
+    时间为 RFC3339，价格为十进制字符串。库存超过 15 分钟视为过期，但不会被改写为无货。
+    采集器和库存写入尚未实现；三级 collection_enabled 仅保存未来执行许可。
+servers:
+  - url: /api/v1
+tags:
+  - {name: auth}
+  - {name: account}
+  - {name: public}
+  - {name: admin}
+
+paths:
+  /auth/csrf:
+    get:
+      tags: [auth]
+      operationId: issueCSRF
+      summary: 获取或复用 CSRF 凭据
+      responses:
+        '200': {$ref: '#/components/responses/CSRFSuccess'}
+        '503': {$ref: '#/components/responses/Error'}
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      requestBody: {$ref: '#/components/requestBodies/Register'}
+      responses:
+        '200': {$ref: '#/components/responses/PublicUserSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      requestBody: {$ref: '#/components/requestBodies/Login'}
+      responses:
+        '200':
+          description: 登录成功；同时设置 HttpOnly refresh cookie
+          headers:
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LoginEnvelope'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      security: [{refreshCookie: []}]
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      responses:
+        '200':
+          description: 刷新成功；新 refresh cookie 不超过原凭据截止时间
+          headers:
+            Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenEnvelope'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/password-reset/code:
+    post:
+      tags: [auth]
+      operationId: requestPasswordResetCode
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      requestBody: {$ref: '#/components/requestBodies/PasswordResetCode'}
+      responses:
+        '202': {$ref: '#/components/responses/PasswordResetCodeAccepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /auth/password-reset/confirm:
+    post:
+      tags: [auth]
+      operationId: confirmPasswordReset
+      parameters: [{$ref: '#/components/parameters/CSRFHeader'}]
+      requestBody: {$ref: '#/components/requestBodies/PasswordResetConfirm'}
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+
+  /me/info:
+    get:
+      tags: [account]
+      operationId: getMe
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/AccountUserSuccess'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /me/update:
+    put:
+      tags: [account]
+      operationId: updateMe
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/UpdateMe'}
+      responses:
+        '200': {$ref: '#/components/responses/AccountUserSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+  /me/password:
+    put:
+      tags: [account]
+      operationId: changePassword
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/ChangePassword'}
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+  /me/mail/code:
+    post:
+      tags: [account]
+      operationId: sendMailVerificationCode
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/MailCode'}
+      responses:
+        '200': {$ref: '#/components/responses/MailCodeSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /me/mail/verify:
+    post:
+      tags: [account]
+      operationId: verifyMail
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/MailConfirm'}
+      responses:
+        '200': {$ref: '#/components/responses/AccountUserSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+
+  /merchant/list:
+    get:
+      tags: [public]
+      operationId: listMerchants
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Q'}]
+      responses:
+        '200': {$ref: '#/components/responses/MerchantListSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+  /merchant/info:
+    get:
+      tags: [public]
+      operationId: getMerchant
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/MerchantSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /vps/list:
+    get:
+      tags: [public]
+      operationId: listVPS
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/MerchantID'}
+        - {$ref: '#/components/parameters/Currency'}
+        - {$ref: '#/components/parameters/BillingPeriod'}
+        - {$ref: '#/components/parameters/StockStatus'}
+        - {$ref: '#/components/parameters/Sort'}
+      responses:
+        '200': {$ref: '#/components/responses/VPSListSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+  /vps/info:
+    get:
+      tags: [public]
+      operationId: getVPS
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/VPSSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /stock/info:
+    get:
+      tags: [public]
+      operationId: getStock
+      description: 无库存记录时返回 status=3、quantity=null、时间=null、is_stale=true。
+      parameters:
+        - name: vps_id
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/ID'}
+      responses:
+        '200': {$ref: '#/components/responses/StockSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /settings/info:
+    get:
+      tags: [public]
+      operationId: getPublicSettings
+      responses:
+        '200': {$ref: '#/components/responses/PublicSettingsSuccess'}
+        '503': {$ref: '#/components/responses/Error'}
+
+  /admin/user/list:
+    get:
+      tags: [admin]
+      operationId: adminListUsers
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+        - {$ref: '#/components/parameters/Q'}
+        - {name: role, in: query, schema: {type: string, enum: [user, admin]}}
+        - {name: frozen, in: query, schema: {type: boolean}}
+      responses:
+        '200': {$ref: '#/components/responses/AdminUserListSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /admin/user/info:
+    get:
+      tags: [admin]
+      operationId: adminGetUser
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/AdminUserSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/user/update:
+    put:
+      tags: [admin]
+      operationId: adminUpdateUser
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/UpdateUser'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminUserSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/user/role:
+    put:
+      tags: [admin]
+      operationId: adminChangeUserRole
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/ChangeRole'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminUserSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /admin/user/resetPassword:
+    post:
+      tags: [admin]
+      operationId: adminResetPassword
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/AdminResetPassword'}
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/froze/freeze:
+    post:
+      tags: [admin]
+      operationId: freezeUser
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Froze'}
+      responses:
+        '200': {$ref: '#/components/responses/FrozeSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /admin/froze/unfreeze:
+    post:
+      tags: [admin]
+      operationId: unfreezeUser
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/Froze'}
+      responses:
+        '200': {$ref: '#/components/responses/FrozeSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+
+  /admin/merchant/list:
+    get:
+      tags: [admin]
+      operationId: adminListMerchants
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/Page'}, {$ref: '#/components/parameters/PageSize'}, {$ref: '#/components/parameters/Q'}, {$ref: '#/components/parameters/Enabled'}]
+      responses:
+        '200': {$ref: '#/components/responses/AdminMerchantListSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+  /admin/merchant/info:
+    get:
+      tags: [admin]
+      operationId: adminGetMerchant
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/AdminMerchantSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/merchant/create:
+    post:
+      tags: [admin]
+      operationId: adminCreateMerchant
+      description: code 创建后不可编辑；软删除记录仍占用 code，不能复用。
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/MerchantCreate'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminMerchantSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /admin/merchant/update:
+    put:
+      tags: [admin]
+      operationId: adminUpdateMerchant
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/MerchantUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminMerchantSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/merchant/delete:
+    delete:
+      tags: [admin]
+      operationId: adminDeleteMerchant
+      description: 存在未删除 VPS 时返回 409；请先删除关联套餐。
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+
+  /admin/vps/list:
+    get:
+      tags: [admin]
+      operationId: adminListVPS
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/MerchantID'}
+        - {$ref: '#/components/parameters/Currency'}
+        - {$ref: '#/components/parameters/BillingPeriod'}
+        - {$ref: '#/components/parameters/StockStatus'}
+        - {$ref: '#/components/parameters/Sort'}
+        - {$ref: '#/components/parameters/Enabled'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminVPSListSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+  /admin/vps/info:
+    get:
+      tags: [admin]
+      operationId: adminGetVPS
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/AdminVPSSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+  /admin/vps/create:
+    post:
+      tags: [admin]
+      operationId: adminCreateVPS
+      description: 只创建套餐，不创建或修改库存记录。
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/VPSCreate'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminVPSSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /admin/vps/update:
+    put:
+      tags: [admin]
+      operationId: adminUpdateVPS
+      description: 只更新套餐，不创建或修改库存记录。
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/VPSUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminVPSSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /admin/vps/delete:
+    delete:
+      tags: [admin]
+      operationId: adminDeleteVPS
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/ID'}]
+      responses:
+        '200': {$ref: '#/components/responses/NullSuccess'}
+        '404': {$ref: '#/components/responses/Error'}
+
+  /admin/settings/info:
+    get:
+      tags: [admin]
+      operationId: adminGetSettings
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/AdminSettingsSuccess'}
+  /admin/settings/update:
+    put:
+      tags: [admin]
+      operationId: adminUpdateSettings
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/SettingsUpdate'}
+      responses:
+        '200': {$ref: '#/components/responses/AdminSettingsSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+  /admin/dashboard/info:
+    get:
+      tags: [admin]
+      operationId: adminGetDashboard
+      description: 商家和 VPS 统计包含未删除的停用项；无库存行的 VPS 计入 unknown_stock_count。
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/DashboardSuccess'}
+
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    refreshCookie: {type: apiKey, in: cookie, name: vps_refresh}
+  parameters:
+    CSRFHeader: {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}
+    ID: {name: id, in: query, required: true, schema: {$ref: '#/components/schemas/ID'}}
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PageSize: {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+    Q: {name: q, in: query, schema: {type: string}}
+    Enabled: {name: enabled, in: query, schema: {type: boolean}}
+    MerchantID: {name: merchant_id, in: query, schema: {$ref: '#/components/schemas/ID'}}
+    Currency: {name: currency, in: query, schema: {type: string, pattern: '^[A-Za-z]{3}$'}}
+    BillingPeriod: {name: billing_period, in: query, schema: {$ref: '#/components/schemas/BillingPeriod'}}
+    StockStatus: {name: status, in: query, schema: {type: integer, enum: [1, 2, 3]}}
+    Sort: {name: sort, in: query, schema: {type: string, enum: [updated_desc, price_asc, price_desc], default: updated_desc}}
+  requestBodies:
+    Register: {$ref: '#/components/x-json-bodies/Register'}
+    Login: {$ref: '#/components/x-json-bodies/Login'}
+    PasswordResetCode: {$ref: '#/components/x-json-bodies/PasswordResetCode'}
+    PasswordResetConfirm: {$ref: '#/components/x-json-bodies/PasswordResetConfirm'}
+    UpdateMe: {$ref: '#/components/x-json-bodies/UpdateMe'}
+    ChangePassword: {$ref: '#/components/x-json-bodies/ChangePassword'}
+    MailCode: {$ref: '#/components/x-json-bodies/MailCode'}
+    MailConfirm: {$ref: '#/components/x-json-bodies/MailConfirm'}
+    UpdateUser: {$ref: '#/components/x-json-bodies/UpdateUser'}
+    ChangeRole: {$ref: '#/components/x-json-bodies/ChangeRole'}
+    AdminResetPassword: {$ref: '#/components/x-json-bodies/AdminResetPassword'}
+    Froze: {$ref: '#/components/x-json-bodies/Froze'}
+    MerchantCreate: {$ref: '#/components/x-json-bodies/MerchantCreate'}
+    MerchantUpdate: {$ref: '#/components/x-json-bodies/MerchantUpdate'}
+    VPSCreate: {$ref: '#/components/x-json-bodies/VPSCreate'}
+    VPSUpdate: {$ref: '#/components/x-json-bodies/VPSUpdate'}
+    SettingsUpdate: {$ref: '#/components/x-json-bodies/SettingsUpdate'}
+  responses:
+    Error: {description: 业务错误, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    NullSuccess: {description: 操作成功, content: {application/json: {schema: {$ref: '#/components/schemas/NullEnvelope'}}}}
+    CSRFSuccess: {description: CSRF 凭据, content: {application/json: {schema: {$ref: '#/components/schemas/CSRFEnvelope'}}}}
+    PublicUserSuccess: {description: 用户公开资料, content: {application/json: {schema: {$ref: '#/components/schemas/PublicUserEnvelope'}}}}
+    AccountUserSuccess: {description: 当前账号资料, content: {application/json: {schema: {$ref: '#/components/schemas/AccountUserEnvelope'}}}}
+    AdminUserSuccess: {description: 管理员用户视图, content: {application/json: {schema: {$ref: '#/components/schemas/AdminUserEnvelope'}}}}
+    AdminUserListSuccess: {description: 管理员用户列表, content: {application/json: {schema: {$ref: '#/components/schemas/AdminUserListEnvelope'}}}}
+    MailCodeSuccess: {description: 邮箱验证码请求, content: {application/json: {schema: {$ref: '#/components/schemas/MailCodeEnvelope'}}}}
+    PasswordResetCodeAccepted: {description: 中性受理结果，不泄露邮箱是否存在, content: {application/json: {schema: {$ref: '#/components/schemas/PasswordResetCodeEnvelope'}}}}
+    FrozeSuccess: {description: 冻结状态；cache_synced=false 表示 SQL 已完成但缓存同步失败, content: {application/json: {schema: {$ref: '#/components/schemas/FrozeEnvelope'}}}}
+    MerchantSuccess: {description: 公开商家, content: {application/json: {schema: {$ref: '#/components/schemas/MerchantEnvelope'}}}}
+    MerchantListSuccess: {description: 公开商家列表, content: {application/json: {schema: {$ref: '#/components/schemas/MerchantListEnvelope'}}}}
+    AdminMerchantSuccess: {description: 管理商家, content: {application/json: {schema: {$ref: '#/components/schemas/AdminMerchantEnvelope'}}}}
+    AdminMerchantListSuccess: {description: 管理商家列表, content: {application/json: {schema: {$ref: '#/components/schemas/AdminMerchantListEnvelope'}}}}
+    VPSSuccess: {description: 公开 VPS, content: {application/json: {schema: {$ref: '#/components/schemas/VPSEnvelope'}}}}
+    VPSListSuccess: {description: 公开 VPS 列表, content: {application/json: {schema: {$ref: '#/components/schemas/VPSListEnvelope'}}}}
+    AdminVPSSuccess: {description: 管理 VPS, content: {application/json: {schema: {$ref: '#/components/schemas/AdminVPSEnvelope'}}}}
+    AdminVPSListSuccess: {description: 管理 VPS 列表, content: {application/json: {schema: {$ref: '#/components/schemas/AdminVPSListEnvelope'}}}}
+    StockSuccess: {description: 当前库存展示, content: {application/json: {schema: {$ref: '#/components/schemas/StockEnvelope'}}}}
+    PublicSettingsSuccess: {description: 公开设置, content: {application/json: {schema: {$ref: '#/components/schemas/PublicSettingsEnvelope'}}}}
+    AdminSettingsSuccess: {description: 管理设置, content: {application/json: {schema: {$ref: '#/components/schemas/AdminSettingsEnvelope'}}}}
+    DashboardSuccess: {description: 管理看板统计, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardEnvelope'}}}}
+  schemas:
+    ID: {type: string, pattern: '^[1-9][0-9]*$', examples: ['42']}
+    Page:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: {type: array, items: {}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+    SuccessBase:
+      type: object
+      required: [code, message, data, request_id]
+      properties:
+        code: {type: integer, const: 0}
+        message: {type: string, const: ok}
+        request_id: {type: string}
+    ErrorEnvelope:
+      type: object
+      required: [code, message, data, request_id]
+      properties:
+        code: {$ref: '#/components/schemas/ErrorCode'}
+        message: {type: string}
+        data: {type: 'null'}
+        request_id: {type: string}
+    NullEnvelope:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessBase'}
+        - {type: object, properties: {data: {type: 'null'}}}
+    CSRFEnvelope: {$ref: '#/components/x-envelope-data/CSRF'}
+    PublicUserEnvelope: {$ref: '#/components/x-envelope-data/PublicUser'}
+    AccountUserEnvelope: {$ref: '#/components/x-envelope-data/AccountUser'}
+    AdminUserEnvelope: {$ref: '#/components/x-envelope-data/AdminUser'}
+    AdminUserListEnvelope: {$ref: '#/components/x-envelope-data/AdminUserList'}
+    LoginEnvelope: {$ref: '#/components/x-envelope-data/Login'}
+    TokenEnvelope: {$ref: '#/components/x-envelope-data/Token'}
+    MailCodeEnvelope: {$ref: '#/components/x-envelope-data/MailCode'}
+    PasswordResetCodeEnvelope: {$ref: '#/components/x-envelope-data/PasswordResetCode'}
+    FrozeEnvelope: {$ref: '#/components/x-envelope-data/Froze'}
+    MerchantEnvelope: {$ref: '#/components/x-envelope-data/Merchant'}
+    MerchantListEnvelope: {$ref: '#/components/x-envelope-data/MerchantList'}
+    AdminMerchantEnvelope: {$ref: '#/components/x-envelope-data/AdminMerchant'}
+    AdminMerchantListEnvelope: {$ref: '#/components/x-envelope-data/AdminMerchantList'}
+    VPSEnvelope: {$ref: '#/components/x-envelope-data/VPS'}
+    VPSListEnvelope: {$ref: '#/components/x-envelope-data/VPSList'}
+    AdminVPSEnvelope: {$ref: '#/components/x-envelope-data/AdminVPS'}
+    AdminVPSListEnvelope: {$ref: '#/components/x-envelope-data/AdminVPSList'}
+    StockEnvelope: {$ref: '#/components/x-envelope-data/Stock'}
+    PublicSettingsEnvelope: {$ref: '#/components/x-envelope-data/PublicSettings'}
+    AdminSettingsEnvelope: {$ref: '#/components/x-envelope-data/AdminSettings'}
+    DashboardEnvelope: {$ref: '#/components/x-envelope-data/Dashboard'}
+    PublicUser:
+      type: object
+      required: [id, username, nickname, role, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        username: {type: string, pattern: '^[a-z0-9][a-z0-9_]{2,63}$'}
+        nickname: {type: string, minLength: 1, maxLength: 64}
+        role: {type: string, enum: [user, admin]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AccountUser:
+      allOf:
+        - {$ref: '#/components/schemas/PublicUser'}
+        - type: object
+          required: [mail, mail_verified, mail_verified_at, mail_required]
+          properties:
+            mail: {type: [string, 'null'], format: email}
+            mail_verified: {type: boolean}
+            mail_verified_at: {type: [string, 'null'], format: date-time}
+            mail_required: {type: boolean}
+    AdminUser:
+      allOf:
+        - {$ref: '#/components/schemas/PublicUser'}
+        - {type: object, required: [frozen], properties: {frozen: {type: boolean}}}
+    LoginResult:
+      type: object
+      required: [user, access_token, token_type, expires_in]
+      properties:
+        user: {$ref: '#/components/schemas/AccountUser'}
+        access_token: {type: string}
+        token_type: {type: string, const: Bearer}
+        expires_in: {type: integer, minimum: 0}
+    TokenResult:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token: {type: string}
+        token_type: {type: string, const: Bearer}
+        expires_in: {type: integer, minimum: 0}
+    MailCodeResult:
+      type: object
+      required: [verification_id, expires_in, retry_after]
+      properties:
+        verification_id: {type: string, format: uuid}
+        expires_in: {type: integer, const: 600}
+        retry_after: {type: integer, const: 60}
+    PasswordResetCodeResult:
+      type: object
+      required: [reset_id, expires_in, retry_after, message]
+      properties:
+        reset_id: {type: string, format: uuid}
+        expires_in: {type: integer, const: 600}
+        retry_after: {type: integer, const: 60}
+        message: {type: string}
+    FrozeResult:
+      type: object
+      required: [user_id, frozen, cache_synced]
+      properties:
+        user_id: {$ref: '#/components/schemas/ID'}
+        frozen: {type: boolean}
+        cache_synced: {type: boolean}
+    Merchant:
+      type: object
+      required: [id, code, name, website_url]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        code: {type: string, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        website_url: {type: string, format: uri, pattern: '^https?://'}
+    AdminMerchant:
+      allOf:
+        - {$ref: '#/components/schemas/Merchant'}
+        - type: object
+          required: [enabled, collection_enabled, created_at, updated_at]
+          properties:
+            enabled: {type: boolean}
+            collection_enabled: {type: boolean}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    Stock:
+      type: object
+      required: [vps_id, status, quantity, last_checked_at, last_in_stock_at, is_stale]
+      properties:
+        vps_id: {$ref: '#/components/schemas/ID'}
+        status: {type: integer, enum: [1, 2, 3], description: 1=有货，2=无货，3=未知}
+        quantity: {type: [integer, 'null'], minimum: 0}
+        last_checked_at: {type: [string, 'null'], format: date-time}
+        last_in_stock_at: {type: [string, 'null'], format: date-time}
+        is_stale: {type: boolean, description: 无记录、无检查时间或检查时间超过 15 分钟时为 true}
+    VPS:
+      type: object
+      required: [id, merchant, code, name, description, cpu_cores, memory_mb, disk_gb, disk_type, transfer_gb, port_mbps, has_ipv4, ipv4_count, has_ipv6, ipv6_count, price_amount, currency, billing_period, purchase_url, stock, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        merchant: {$ref: '#/components/schemas/Merchant'}
+        code: {type: string}
+        name: {type: string}
+        description: {type: string}
+        cpu_cores: {type: integer, minimum: 1}
+        memory_mb: {type: integer, minimum: 1}
+        disk_gb: {type: integer, minimum: 0}
+        disk_type: {type: string}
+        transfer_gb: {type: [integer, 'null'], minimum: 0, description: null=未知，0=不限量}
+        port_mbps: {type: [integer, 'null'], minimum: 0, description: null=未知，0=不限量}
+        has_ipv4: {type: boolean}
+        ipv4_count: {type: integer, minimum: 0}
+        has_ipv6: {type: boolean}
+        ipv6_count: {type: integer, minimum: 0}
+        price_amount: {$ref: '#/components/schemas/Price'}
+        currency: {$ref: '#/components/schemas/Currency'}
+        billing_period: {$ref: '#/components/schemas/BillingPeriod'}
+        purchase_url: {type: string, format: uri, pattern: '^https?://'}
+        stock: {$ref: '#/components/schemas/Stock'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AdminVPS:
+      allOf:
+        - {$ref: '#/components/schemas/VPS'}
+        - type: object
+          required: [merchant_id, enabled, collection_enabled]
+          properties:
+            merchant_id: {$ref: '#/components/schemas/ID'}
+            enabled: {type: boolean}
+            collection_enabled: {type: boolean}
+    PublicSettings:
+      type: object
+      required: [site_name, registration_enabled]
+      properties:
+        site_name: {type: string, minLength: 1, maxLength: 128}
+        registration_enabled: {type: boolean}
+    AdminSettings:
+      type: object
+      required: [settings, collection_enabled, collector_implemented, updated_at]
+      properties:
+        settings: {$ref: '#/components/schemas/PublicSettings'}
+        collection_enabled: {type: boolean}
+        collector_implemented: {type: boolean, const: false, readOnly: true}
+        updated_at: {type: string, format: date-time}
+    DashboardSummary:
+      type: object
+      required: [user_count, frozen_user_count, merchant_count, vps_count, in_stock_count, unknown_stock_count]
+      properties:
+        user_count: {type: integer, minimum: 0}
+        frozen_user_count: {type: integer, minimum: 0}
+        merchant_count: {type: integer, minimum: 0}
+        vps_count: {type: integer, minimum: 0}
+        in_stock_count: {type: integer, minimum: 0}
+        unknown_stock_count: {type: integer, minimum: 0}
+    Price: {type: string, pattern: '^[0-9]{1,12}(\.[0-9]{1,8})?$'}
+    Currency: {type: string, pattern: '^[A-Z]{3}$'}
+    BillingPeriod: {type: string, enum: [monthly, quarterly, yearly, one_time]}
+    VPSEditable:
+      type: object
+      required: [merchant_id, code, name, description, cpu_cores, memory_mb, disk_gb, disk_type, transfer_gb, port_mbps, has_ipv4, ipv4_count, has_ipv6, ipv6_count, price_amount, currency, billing_period, purchase_url, enabled, collection_enabled]
+      properties:
+        merchant_id: {$ref: '#/components/schemas/ID'}
+        code: {type: string, pattern: '^[a-z0-9][a-z0-9._-]{0,63}$'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 10000}
+        cpu_cores: {type: integer, minimum: 1}
+        memory_mb: {type: integer, minimum: 1}
+        disk_gb: {type: integer, minimum: 0}
+        disk_type: {type: string, minLength: 1, maxLength: 32}
+        transfer_gb: {type: [integer, 'null'], minimum: 0}
+        port_mbps: {type: [integer, 'null'], minimum: 0}
+        has_ipv4: {type: boolean}
+        ipv4_count: {type: integer, minimum: 0, description: has_ipv4=false 时必须为 0，true 时必须大于 0}
+        has_ipv6: {type: boolean}
+        ipv6_count: {type: integer, minimum: 0, description: has_ipv6=false 时必须为 0，true 时必须大于 0}
+        price_amount: {$ref: '#/components/schemas/Price'}
+        currency: {$ref: '#/components/schemas/Currency'}
+        billing_period: {$ref: '#/components/schemas/BillingPeriod'}
+        purchase_url: {type: string, format: uri, pattern: '^https?://'}
+        enabled: {type: boolean}
+        collection_enabled: {type: boolean}
+    ErrorCode:
+      type: integer
+      enum: [100001, 100003, 100004, 100005, 100006, 200001, 200002, 200003, 200005, 200006, 200009, 200011, 200012, 200013, 200014, 200015, 200016, 200017, 200018, 300001, 300002, 300003, 400001, 900004, 900005]
+  x-json-bodies:
+    Register: {required: true, content: {application/json: {schema: {type: object, required: [username, nickname, password], properties: {username: {type: string}, nickname: {type: string}, password: {type: string, minLength: 8, maxLength: 72}}}}}}
+    Login: {required: true, content: {application/json: {schema: {type: object, required: [username, password], properties: {username: {type: string}, password: {type: string}}}}}}
+    PasswordResetCode: {required: true, content: {application/json: {schema: {type: object, required: [mail], properties: {mail: {type: string, format: email}}}}}}
+    PasswordResetConfirm: {required: true, content: {application/json: {schema: {type: object, required: [reset_id, code, new_password], properties: {reset_id: {type: string, format: uuid}, code: {type: string, pattern: '^[0-9]{6}$'}, new_password: {type: string, minLength: 8, maxLength: 72}}}}}}
+    UpdateMe: {required: true, content: {application/json: {schema: {type: object, required: [nickname], properties: {nickname: {type: string, minLength: 1, maxLength: 64}}}}}}
+    ChangePassword: {required: true, content: {application/json: {schema: {type: object, required: [current_password, new_password], properties: {current_password: {type: string}, new_password: {type: string, minLength: 8, maxLength: 72}}}}}}
+    MailCode: {required: true, content: {application/json: {schema: {type: object, required: [mail], properties: {mail: {type: string, format: email}, current_password: {type: string, description: 更换已绑定邮箱时必填}}}}}}
+    MailConfirm: {required: true, content: {application/json: {schema: {type: object, required: [verification_id, code], properties: {verification_id: {type: string, format: uuid}, code: {type: string, pattern: '^[0-9]{6}$'}}}}}}
+    UpdateUser: {required: true, content: {application/json: {schema: {type: object, required: [id, nickname], properties: {id: {$ref: '#/components/schemas/ID'}, nickname: {type: string, minLength: 1, maxLength: 64}}}}}}
+    ChangeRole: {required: true, content: {application/json: {schema: {type: object, required: [id, role], properties: {id: {$ref: '#/components/schemas/ID'}, role: {type: string, enum: [user, admin]}}}}}}
+    AdminResetPassword: {required: true, content: {application/json: {schema: {type: object, required: [user_id, new_password], properties: {user_id: {$ref: '#/components/schemas/ID'}, new_password: {type: string, minLength: 8, maxLength: 72}}}}}}
+    Froze: {required: true, content: {application/json: {schema: {type: object, required: [user_id], properties: {user_id: {$ref: '#/components/schemas/ID'}}}}}}
+    MerchantCreate: {required: true, content: {application/json: {schema: {type: object, required: [code, name, website_url, enabled, collection_enabled], properties: {code: {type: string}, name: {type: string}, website_url: {type: string, format: uri}, enabled: {type: boolean}, collection_enabled: {type: boolean}}}}}}
+    MerchantUpdate: {required: true, content: {application/json: {schema: {type: object, required: [id, name, website_url, enabled, collection_enabled], properties: {id: {$ref: '#/components/schemas/ID'}, name: {type: string}, website_url: {type: string, format: uri}, enabled: {type: boolean}, collection_enabled: {type: boolean}}}}}}
+    VPSCreate: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/VPSEditable'}}}}
+    VPSUpdate: {required: true, content: {application/json: {schema: {allOf: [{$ref: '#/components/schemas/VPSEditable'}, {type: object, required: [id], properties: {id: {$ref: '#/components/schemas/ID'}}}]}}}}
+    SettingsUpdate: {required: true, content: {application/json: {schema: {type: object, minProperties: 1, properties: {site_name: {type: string, minLength: 1, maxLength: 128}, registration_enabled: {type: boolean}, collection_enabled: {type: boolean}}, additionalProperties: false}}}}
+  x-envelope-data:
+    CSRF: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {type: object, required: [token], properties: {token: {type: string}}}}}]}
+    PublicUser: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/PublicUser'}}}]}
+    AccountUser: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/AccountUser'}}}]}
+    AdminUser: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/AdminUser'}}}]}
+    AdminUserList: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/AdminUser'}}}}]}}}]}
+    Login: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/LoginResult'}}}]}
+    Token: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/TokenResult'}}}]}
+    MailCode: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/MailCodeResult'}}}]}
+    PasswordResetCode: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/PasswordResetCodeResult'}}}]}
+    Froze: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/FrozeResult'}}}]}
+    Merchant: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/Merchant'}}}]}
+    MerchantList: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/Merchant'}}}}]}}}]}
+    AdminMerchant: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/AdminMerchant'}}}]}
+    AdminMerchantList: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/AdminMerchant'}}}}]}}}]}
+    VPS: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/VPS'}}}]}
+    VPSList: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/VPS'}}}}]}}}]}
+    AdminVPS: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/AdminVPS'}}}]}
+    AdminVPSList: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {allOf: [{$ref: '#/components/schemas/Page'}, {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/AdminVPS'}}}}]}}}]}
+    Stock: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/Stock'}}}]}
+    PublicSettings: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/PublicSettings'}}}]}
+    AdminSettings: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/AdminSettings'}}}]}
+    Dashboard: {allOf: [{$ref: '#/components/schemas/SuccessBase'}, {type: object, properties: {data: {$ref: '#/components/schemas/DashboardSummary'}}}]}

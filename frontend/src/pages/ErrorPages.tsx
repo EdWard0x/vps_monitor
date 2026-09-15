@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShieldAlert, Compass, Home } from 'lucide-react';
+import { ShieldAlert, Compass, Home, Hammer } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export const NotFoundPage: React.FC = () => {
@@ -48,6 +48,28 @@ export const ForbiddenPage: React.FC = () => {
           <Button variant="primary">切换账号登录</Button>
         </Link>
       </div>
+    </div>
+  );
+};
+
+export const NotImplementedCard: React.FC<{
+  title?: string;
+  description?: string;
+  className?: string;
+}> = ({
+  title = '功能尚未实现',
+  description = '当前端点返回 HTTP 501 (NOT_IMPLEMENTED)。后端骨架正在重构中，待维护者接入具体业务。',
+  className = '',
+}) => {
+  return (
+    <div
+      className={`rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 p-8 text-center ${className}`}
+    >
+      <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4">
+        <Hammer className="w-6 h-6" />
+      </div>
+      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+      <p className="mt-1 text-sm text-gray-600 max-w-md mx-auto">{description}</p>
     </div>
   );
 };

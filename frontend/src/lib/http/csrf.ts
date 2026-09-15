@@ -35,8 +35,8 @@ export async function ensureCsrfToken(baseUrl: string = '/api/v1'): Promise<stri
         throw new Error(`获取 CSRF Token 失败: HTTP ${resp.status}`);
       }
       const json = await resp.json();
-      if (json && json.data && typeof json.data.csrf_token === 'string') {
-        memoryCsrfToken = json.data.csrf_token;
+      if (json && json.data && typeof json.data.token === 'string') {
+        memoryCsrfToken = json.data.token;
         return memoryCsrfToken!;
       }
       throw new Error('CSRF 响应格式不匹配');

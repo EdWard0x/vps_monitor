@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { useSettings } from '@/app/SettingsContext';
 import { Button } from '@/components/ui/Button';
-import { Server, Menu, X, Shield, User, MessageSquare, LogOut } from 'lucide-react';
+import { Server, Menu, X, Shield, User, LogOut } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -55,12 +55,6 @@ export const Header: React.FC = () => {
                   </Button>
                 </Link>
               )}
-              <Link to="/account/comments">
-                <Button variant="ghost" size="sm" title="我的评论">
-                  <MessageSquare className="w-4 h-4 mr-1 text-gray-500" />
-                  我的评论
-                </Button>
-              </Link>
               <Link to="/account">
                 <Button variant="ghost" size="sm">
                   <User className="w-4 h-4 mr-1.5 text-gray-500" />
@@ -104,62 +98,61 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* 移动端展开导航 */}
+      {/* 移动端折叠菜单 */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-200 bg-white px-4 pt-3 pb-5 space-y-2 animate-fade-in shadow-lg">
-          <Link
-            to="/"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-base font-medium text-gray-800 hover:bg-gray-100"
-          >
-            库存监控
-          </Link>
-          <Link
-            to="/merchants"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-base font-medium text-gray-800 hover:bg-gray-100"
-          >
-            商家列表
-          </Link>
+        <div className="md:hidden border-b border-gray-200 bg-white px-4 pt-2 pb-4 space-y-3">
+          <div className="space-y-1">
+            <Link
+              to="/"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-base font-medium text-gray-700 hover:bg-gray-100"
+            >
+              库存监控
+            </Link>
+            <Link
+              to="/merchants"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-lg text-base font-medium text-gray-700 hover:bg-gray-100"
+            >
+              商家列表
+            </Link>
+          </div>
 
           <div className="pt-3 border-t border-gray-100">
             {user ? (
-              <div className="space-y-1.5">
-                <div className="px-3 py-1 text-xs text-gray-400 font-medium">
-                  当前用户：<span className="text-gray-800 font-bold">{user.nickname}</span>
+              <div className="space-y-2">
+                <div className="px-3 py-1 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-800">{user.nickname}</span>
+                  {isAdmin && (
+                    <span className="text-xs bg-brand-50 text-brand-700 font-medium px-2 py-0.5 rounded-full border border-brand-200">
+                      管理员
+                    </span>
+                  )}
                 </div>
                 {isAdmin && (
                   <Link
                     to="/admin"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-brand-600 bg-brand-50"
+                    className="flex items-center w-full px-3 py-2 rounded-lg text-sm text-brand-700 hover:bg-brand-50 font-medium"
                   >
                     <Shield className="w-4 h-4 mr-2" />
-                    管理后台
+                    进入管理后台
                   </Link>
                 )}
                 <Link
                   to="/account"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
+                  className="flex items-center w-full px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 font-medium"
                 >
-                  <User className="w-4 h-4 mr-2 text-gray-400" />
-                  个人中心与会话
-                </Link>
-                <Link
-                  to="/account/comments"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
-                >
-                  <MessageSquare className="w-4 h-4 mr-2 text-gray-400" />
-                  我的评论
+                  <User className="w-4 h-4 mr-2 text-gray-500" />
+                  个人中心
                 </Link>
                 <button
                   onClick={() => {
                     setMobileMenuOpen(false);
                     handleLogout();
                   }}
-                  className="flex items-center w-full px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50"
+                  className="flex items-center w-full px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 font-medium"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
                   退出登录
@@ -168,13 +161,13 @@ export const Header: React.FC = () => {
             ) : (
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="outline" size="sm" className="w-full">
+                  <Button variant="outline" size="md" className="w-full">
                     登录
                   </Button>
                 </Link>
                 {settings?.registration_enabled && (
                   <Link to="/register" onClick={() => setMobileMenuOpen(false)}>
-                    <Button variant="primary" size="sm" className="w-full">
+                    <Button variant="primary" size="md" className="w-full">
                       注册
                     </Button>
                   </Link>

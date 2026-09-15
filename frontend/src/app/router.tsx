@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, createMemoryRouter, RouteObject, Navigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { AuthGuard, AdminGuard, GuestGuard } from './Guards';
@@ -15,10 +15,10 @@ import { VpsDetailPage } from '@/pages/public/VpsDetailPage';
 // 认证与用户页面
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
+import { PasswordResetPage } from '@/pages/auth/PasswordResetPage';
 import { AccountPage } from '@/pages/account/AccountPage';
-import { MyCommentsPage } from '@/pages/account/MyCommentsPage';
 
-// 管理员后台页面（懒加载，优化首屏包体积）
+// 管理员后台页面（懒加载）
 const AdminDashboardPage = lazy(() =>
   import('@/pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage }))
 );
@@ -31,14 +31,8 @@ const AdminVpsPage = lazy(() =>
 const AdminVpsDetailPage = lazy(() =>
   import('@/pages/admin/AdminVpsDetailPage').then((m) => ({ default: m.AdminVpsDetailPage }))
 );
-const AdminMonitorsPage = lazy(() =>
-  import('@/pages/admin/AdminMonitorsPage').then((m) => ({ default: m.AdminMonitorsPage }))
-);
 const AdminUsersPage = lazy(() =>
   import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage }))
-);
-const AdminCommentsPage = lazy(() =>
-  import('@/pages/admin/AdminCommentsPage').then((m) => ({ default: m.AdminCommentsPage }))
 );
 const AdminSettingsPage = lazy(() =>
   import('@/pages/admin/AdminSettingsPage').then((m) => ({ default: m.AdminSettingsPage }))
@@ -48,7 +42,7 @@ const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
   <Suspense fallback={<LoadingSpinner label="加载管理页面中..." />}>{children}</Suspense>
 );
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   // 前台公开与用户路由
   {
     path: '/',
@@ -75,6 +69,18 @@ export const router = createBrowserRouter([
         ),
       },
       {
+        path: 'reset-password',
+        element: (
+          <GuestGuard>
+            <PasswordResetPage />
+          </GuestGuard>
+        ),
+      },
+      {
+        path: 'forgot-password',
+        element: <Navigate to="/reset-password" replace />,
+      },
+      {
         path: 'account',
         element: (
           <AuthGuard>
@@ -82,20 +88,10 @@ export const router = createBrowserRouter([
           </AuthGuard>
         ),
       },
-      {
-        path: 'account/comments',
-        element: (
-          <AuthGuard>
-            <MyCommentsPage />
-          </AuthGuard>
-        ),
-      },
-      { path: '403', element: <ForbiddenPage /> },
-      { path: '*', element: <NotFoundPage /> },
     ],
   },
 
-  // 管理后台路由（按路由组懒加载与权限守卫）
+  // 后台管理路由
   {
     path: '/admin',
     element: (
@@ -137,26 +133,10 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'monitors',
-        element: (
-          <SuspenseWrapper>
-            <AdminMonitorsPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
         path: 'users',
         element: (
           <SuspenseWrapper>
             <AdminUsersPage />
-          </SuspenseWrapper>
-        ),
-      },
-      {
-        path: 'comments',
-        element: (
-          <SuspenseWrapper>
-            <AdminCommentsPage />
           </SuspenseWrapper>
         ),
       },
@@ -170,4 +150,13 @@ export const router = createBrowserRouter([
       },
     ],
   },
-]);
+
+  // 错误兜底页面
+  { path: '/403', element: <ForbiddenPage /> },
+  { path: '*', element: <NotFoundPage /> },
+];
+
+export const router =
+  typeof document !== 'undefined'
+    ? createBrowserRouter(routes)
+    : createMemoryRouter(routes);

@@ -5,9 +5,7 @@ import {
   LayoutDashboard,
   Store,
   Server,
-  Activity,
   Users,
-  MessageSquare,
   Settings as SettingsIcon,
   ArrowLeft,
   Menu,
@@ -16,15 +14,12 @@ import {
   Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { DemoModeBanner } from '../demo/DemoModeBanner';
 
 const navItems = [
   { path: '/admin', label: '总览看板', icon: LayoutDashboard, end: true },
   { path: '/admin/merchants', label: '商家管理', icon: Store },
   { path: '/admin/vps', label: 'VPS 套餐', icon: Server },
-  { path: '/admin/monitors', label: '监控调度', icon: Activity },
   { path: '/admin/users', label: '用户管理', icon: Users },
-  { path: '/admin/comments', label: '评论审核', icon: MessageSquare },
   { path: '/admin/settings', label: '站点设置', icon: SettingsIcon },
 ];
 
@@ -67,8 +62,6 @@ export const AdminLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100/60">
-      <DemoModeBanner />
-
       {/* 管理端顶部栏 */}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 sm:px-6 shadow-sm">
         <div className="flex items-center space-x-3">
@@ -99,52 +92,46 @@ export const AdminLayout: React.FC = () => {
             onClick={handleLogout}
             className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
             title="退出登录"
+            aria-label="退出登录"
           >
             <LogOut className="w-4 h-4" />
           </button>
         </div>
       </header>
 
-      <div className="flex flex-1">
-        {/* 桌面端侧边栏 */}
-        <aside className="hidden md:flex w-64 flex-col border-r border-gray-200 bg-white">
-          <div className="flex-1 overflow-y-auto">
-            <NavList />
-          </div>
-          <div className="p-4 border-t border-gray-100 text-xs text-gray-400 text-center">
-            管理员专区 · 严格权限审计
-          </div>
+      <div className="flex-1 flex max-w-7xl w-full mx-auto">
+        {/* 桌面端左侧侧边栏 */}
+        <aside className="hidden md:block w-60 shrink-0 border-r border-gray-200 bg-white min-h-[calc(100vh-4rem)]">
+          <NavList />
         </aside>
 
-        {/* 移动端侧边抽屉 */}
+        {/* 移动端抽屉 */}
         {mobileDrawerOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-50 md:hidden flex">
             <div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
               onClick={() => setMobileDrawerOpen(false)}
             />
-            <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-gray-100">
-                <div className="flex items-center space-x-2 font-bold text-gray-800">
-                  <Shield className="w-5 h-5 text-brand-600" />
+            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white shadow-xl">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <div className="flex items-center space-x-2 text-brand-700 font-bold">
+                  <Shield className="w-5 h-5" />
                   <span>管理导航</span>
                 </div>
                 <button
                   onClick={() => setMobileDrawerOpen(false)}
-                  className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto">
-                <NavList />
-              </div>
+              <NavList />
             </div>
           </div>
         )}
 
-        {/* 主体管理内容 */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-x-auto">
+        {/* 页面主内容区域 */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
           <Outlet />
         </main>
       </div>

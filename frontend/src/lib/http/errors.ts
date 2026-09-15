@@ -1,4 +1,4 @@
-import { FieldError } from '@/types/api';
+import { FieldError } from '@/types';
 import { BusinessCodeMessages } from '@/types/error';
 
 export class AppError extends Error {

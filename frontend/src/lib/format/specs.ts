@@ -1,5 +1,4 @@
-// 规格格式化工具（根据文档 09，null 与 0 必须明确区分）
-import { DiskType } from '@/types/api';
+import { DiskType } from '@/types';
 
 export function formatTransfer(transferGb: number | null | undefined): string {
   if (transferGb === null || transferGb === undefined) return '未知';

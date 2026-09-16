@@ -22,5 +22,5 @@ type Reader interface {
 	Read(context.Context, ReadOptions) ([]Delivery, error)
 }
 type Acknowledger interface {
-	Ack(context.Context, string) error
+	Ack(context.Context, ReadOptions, string) error
 }

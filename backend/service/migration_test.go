@@ -34,16 +34,16 @@ func TestInitialMigrationMatchesCurrentScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 3 || files[0].Version != 1 || files[0].Name != "initial" {
+	if len(files) != 1 || files[0].Version != 1 || files[0].Name != "initial" {
 		t.Fatalf("unexpected migrations: %#v", files)
 	}
 	lower := strings.ToLower(files[0].UpSQL)
-	for _, required := range []string{"create table users", "create table fronze", "create table merchant", "create table vps_detail", "create table vps_stocks", "create table site_settings", "create table user_mail_verifications", "create table password_reset_requests", "token_version"} {
+	for _, required := range []string{"create table users", "create table fronze", "create table merchant", "create table vps_detail", "create table vps_stocks", "create table site_settings", "create table user_mail_verifications", "create table password_reset_requests", "token_version", "collection_enabled", "public_id", "failed_attempts", "delivery_id"} {
 		if !strings.Contains(lower, required) {
 			t.Errorf("missing %q", required)
 		}
 	}
-	for _, removed := range []string{"user_sessions", "comments", "vps_monitor_configs", "collector_code", "refresh_jti"} {
+	for _, removed := range []string{"user_sessions", "comments", "vps_monitor_configs", "collector_code", "refresh_jti", "observation_version"} {
 		if strings.Contains(lower, removed) {
 			t.Errorf("removed schema remains: %q", removed)
 		}

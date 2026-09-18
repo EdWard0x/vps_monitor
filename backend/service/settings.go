@@ -5,12 +5,13 @@ import (
 	"errors"
 	"strings"
 
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"vpsmonitor/model/entity"
 	"vpsmonitor/model/errcode"
 	"vpsmonitor/model/request"
 	"vpsmonitor/model/response"
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SettingsService struct{ DB *gorm.DB }
@@ -20,7 +21,7 @@ func NewSettingsService(db *gorm.DB) *SettingsService { return &SettingsService{
 func settingsResponse(row entity.SiteSetting) response.AdminSettings {
 	return response.AdminSettings{
 		Settings:  response.PublicSettings{SiteName: row.SiteName, RegistrationEnabled: row.RegistrationEnabled},
-		UpdatedAt: row.UpdatedAt, CollectionEnabled: row.CollectionEnabled, CollectorImplemented: false,
+		UpdatedAt: row.UpdatedAt, CollectionEnabled: row.CollectionEnabled, CollectorImplemented: true,
 	}
 }
 

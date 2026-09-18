@@ -144,15 +144,15 @@ export const AdminSettingsPage: React.FC = () => {
                 className="mt-0.5"
               />
               <div>
-                <span className="text-sm font-semibold text-gray-900 block">允许未来全局采集</span>
+                <span className="text-sm font-semibold text-gray-900 block">启用全局库存采集</span>
                 <span className="text-xs text-gray-500">
-                  这是全局许可，还需商家和套餐各自允许且处于启用状态
+                  全局库存采集总开关。开启后允许后台创建采集任务；实际采集还要求对应商家和 VPS 套餐两级开关均已开启。
                 </span>
               </div>
             </label>
             {!collectorImplemented && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                采集配置可保存，实际采集功能待接入。保存该配置不会触发后台采集任务、进度条或库存变更。
+                后端采集能力不可用：系统暂未具备或部署采集能力，保存配置后暂不会产生采集结果。
               </p>
             )}
           </div>

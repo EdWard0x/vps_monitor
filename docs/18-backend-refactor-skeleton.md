@@ -198,7 +198,7 @@ SQL 成功、Redis 写入/删除失败时，保持 SQL 结果，返回 `cache_sy
 
 默认传输采用 Redis Streams 消费者组；这是消息边界默认值，具体生产程序、调度和消息处理由维护者实现。普通 Pub/Sub 可用于允许丢失的通知，不混作可靠库存结果。
 
-库存事件 DTO 定义 schema_version、event_id、source、vps_id、observed_at、observation_version、status、quantity。注释明确版本按哪个来源/套餐递增，以及来源映射待实现。
+库存任务使用 Redis Stream 消息 ID 作为每个 VPS 最后成功应用的顺序依据，数据库保存 delivery_id 用于重复与乱序判断。
 
 只定义消息读取、解析入口、处理结果和确认边界。业务未来应在 SQL 更新成功后确认消息，重复与乱序处理写成 TODO；骨架不实现重试队列、死信系统或额外消费记录表。邮件投递独立保留外壳，不能因移除采集 worker 而丢掉找回邮件能力。
 

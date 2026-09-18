@@ -5,7 +5,9 @@ info:
   description: |
     VPS Monitor 真实业务接口。所有业务响应使用统一包络，ID 为十进制字符串，
     时间为 RFC3339，价格为十进制字符串。库存超过 15 分钟视为过期，但不会被改写为无货。
-    采集器和库存写入尚未实现；三级 collection_enabled 仅保存未来执行许可。
+    库存由后台调度器和 Worker 自动采集并写入。站点、商家和 VPS 三级
+    collection_enabled 共同决定是否允许创建采集任务；这些字段不表示任务正在执行，
+    collector_implemented 也只表示后端具备采集能力，不表示 Worker 的实时健康状态。
 servers:
   - url: /api/v1
 tags:
@@ -617,7 +619,7 @@ components:
           required: [enabled, collection_enabled, created_at, updated_at]
           properties:
             enabled: {type: boolean}
-            collection_enabled: {type: boolean}
+            collection_enabled: {type: boolean, description: 是否允许采集该商家下的 VPS 库存；仍受全局开关、商家 enabled 和 VPS 自身开关限制}
             created_at: {type: string, format: date-time}
             updated_at: {type: string, format: date-time}
     Stock:
@@ -664,7 +666,7 @@ components:
           properties:
             merchant_id: {$ref: '#/components/schemas/ID'}
             enabled: {type: boolean}
-            collection_enabled: {type: boolean}
+            collection_enabled: {type: boolean, description: 是否允许采集该 VPS 的库存；仍受全局及所属商家开关限制}
     PublicSettings:
       type: object
       required: [site_name, registration_enabled]
@@ -676,8 +678,8 @@ components:
       required: [settings, collection_enabled, collector_implemented, updated_at]
       properties:
         settings: {$ref: '#/components/schemas/PublicSettings'}
-        collection_enabled: {type: boolean}
-        collector_implemented: {type: boolean, const: false, readOnly: true}
+        collection_enabled: {type: boolean, description: 全局库存采集许可；关闭后不应创建任何 VPS 采集任务}
+        collector_implemented: {type: boolean, const: true, readOnly: true, description: 后端已具备库存采集能力；不表示 Worker 当前在线或任务正在执行}
         updated_at: {type: string, format: date-time}
     DashboardSummary:
       type: object
@@ -715,7 +717,7 @@ components:
         billing_period: {$ref: '#/components/schemas/BillingPeriod'}
         purchase_url: {type: string, format: uri, pattern: '^https?://'}
         enabled: {type: boolean}
-        collection_enabled: {type: boolean}
+        collection_enabled: {type: boolean, description: 是否允许采集该 VPS 的库存；仍受全局及所属商家开关限制}
     ErrorCode:
       type: integer
       enum: [100001, 100003, 100004, 100005, 100006, 200001, 200002, 200003, 200005, 200006, 200009, 200011, 200012, 200013, 200014, 200015, 200016, 200017, 200018, 300001, 300002, 300003, 400001, 900004, 900005]

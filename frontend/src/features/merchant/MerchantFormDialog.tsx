@@ -12,6 +12,7 @@ export interface MerchantFormDialogProps {
   onSubmitUpdate?: (input: MerchantUpdateInput) => Promise<void>;
   initialData?: AdminMerchant | null;
   loading?: boolean;
+  globalCollectionEnabled?: boolean;
 }
 
 export const MerchantFormDialog: React.FC<MerchantFormDialogProps> = ({
@@ -21,6 +22,7 @@ export const MerchantFormDialog: React.FC<MerchantFormDialogProps> = ({
   onSubmitUpdate,
   initialData,
   loading = false,
+  globalCollectionEnabled,
 }) => {
   const isEdit = Boolean(initialData);
 
@@ -146,13 +148,15 @@ export const MerchantFormDialog: React.FC<MerchantFormDialogProps> = ({
               <div>
                 <span className="text-sm font-medium text-gray-700 block">允许采集该商家</span>
                 <span className="text-xs text-gray-400 block mt-0.5">
-                  商家级采集许可。未来执行需要全局、商家、VPS 三级均开启；上级关闭时此处配置依旧保留。
+                  商家级采集许可。实际采集需要全局、商家、VPS 三级均开启；上级关闭时此处配置依旧保留。
                 </span>
               </div>
             </label>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2">
-              采集配置可保存，实际采集功能待接入。
-            </p>
+            {globalCollectionEnabled === false && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2">
+                受全局开关限制：当前全局采集已停用，开启后本商家的采集配置才会生效。
+              </p>
+            )}
           </div>
         </div>
 

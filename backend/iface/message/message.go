@@ -23,4 +23,5 @@ type Reader interface {
 }
 type Acknowledger interface {
 	Ack(context.Context, ReadOptions, string) error
+	Del(context.Context, ReadOptions, string) error
 }

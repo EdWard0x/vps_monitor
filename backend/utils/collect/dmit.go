@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"vpsmonitor/iface/collect"
+	"vpsmonitor/model/errcode"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -17,17 +18,17 @@ func (c DmitCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if !c.Enabled {
 		return collect.Observation{}, nil
 	}
-	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 8000)
+	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 10000)
 	if err != nil {
-		return collect.Observation{}, err
+		return collect.Observation{}, errcode.FlareResolveFailed
 	}
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(f.Solution.Res))
 	if err != nil {
-		return collect.Observation{}, err
+		return collect.Observation{}, errcode.QueryHtmlFailed
 	}
 	title := doc.Find("#order-boxes .header-lined h1")
 	if title.Length() == 0 {
-		return collect.Observation{}, nil
+		return collect.Observation{}, errcode.QueryHtmlFailed
 	}
 	text := strings.TrimSpace(title.Text())
 	if text == "Out of Stock" {

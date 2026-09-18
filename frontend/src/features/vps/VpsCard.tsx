@@ -4,9 +4,10 @@ import { VPS } from '@/types/vps';
 import { StockBadge } from '@/components/common/StockBadge';
 import { formatPrice } from '@/lib/format/money';
 import { formatMemory, formatDisk, formatPort, formatTransfer } from '@/lib/format/specs';
+import { formatDate, formatRelativeTime } from '@/lib/format/date';
 import { isSafeExternalUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
-import { Cpu, HardDrive, Zap, Globe, ShoppingCart, ArrowRight } from 'lucide-react';
+import { Cpu, HardDrive, Zap, Globe, ShoppingCart, ArrowRight, Clock } from 'lucide-react';
 
 export interface VpsCardProps {
   vps: VPS;
@@ -60,10 +61,27 @@ export const VpsCard: React.FC<VpsCardProps> = ({ vps }) => {
         </div>
 
         {vps.description && (
-          <p className="text-xs text-gray-500 line-clamp-2 mt-2 mb-3">
+          <p className="text-xs text-gray-500 line-clamp-2 mt-2 mb-2">
             {vps.description}
           </p>
         )}
+
+        {/* 上次检查时间 */}
+        <div className="flex items-center text-xs text-gray-500 my-2.5">
+          <Clock className="w-3.5 h-3.5 text-gray-400 mr-1.5 shrink-0" />
+          <span className="text-gray-400 shrink-0">上次检查时间：</span>
+          <span
+            className="font-medium text-gray-700 truncate"
+            title={vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : undefined}
+          >
+            {vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : '尚未获得采集结果'}
+          </span>
+          {vps.stock?.last_checked_at && (
+            <span className="text-gray-400 ml-1 text-[11px] shrink-0">
+              ({formatRelativeTime(vps.stock.last_checked_at)})
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 底部价格与购买按钮 */}

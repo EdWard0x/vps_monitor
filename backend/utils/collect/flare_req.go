@@ -43,7 +43,7 @@ func FlareRequest(ctx context.Context, sourceURL string, processorURL string, ti
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequest("GET", processorURL, bytes.NewBuffer(body))
+	request, err := http.NewRequest("POST", processorURL, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}

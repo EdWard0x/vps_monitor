@@ -18,4 +18,4 @@ go run ./cmd/migrate up --dir migrations
 go run ./cmd/migrate down --dir migrations
 ```
 
-`001_initial` 是全新架构初始化，不负责转换旧库。它只包含 users、fronze、merchant、vps_detail、vps_stocks、site_settings、user_mail_verifications 和 password_reset_requests。旧库升级必须另写数据转换迁移并先备份数据库。
+`001_initial` 是当前架构的全新数据库基线，包含 users、fronze、merchant、vps_detail、vps_stocks、site_settings、user_mail_verifications 和 password_reset_requests，以及三级采集开关、邮件挑战字段和 Redis Stream delivery_id。它不负责转换旧库；旧库升级必须另写数据转换迁移并先备份数据库。

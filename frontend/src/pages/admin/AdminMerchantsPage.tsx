@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AdminMerchant, MerchantCreateInput, MerchantUpdateInput } from '@/types/merchant';
 import * as merchantApi from '@/api/merchant';
+import * as settingsApi from '@/api/settings';
 import { MerchantFilter } from '@/features/merchant/MerchantFilter';
 import { MerchantTable } from '@/features/merchant/MerchantTable';
 import { MerchantFormDialog } from '@/features/merchant/MerchantFormDialog';
@@ -28,11 +29,19 @@ export const AdminMerchantsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isNotImplemented, setIsNotImplemented] = useState(false);
+  const [globalCollectionEnabled, setGlobalCollectionEnabled] = useState<boolean | undefined>(undefined);
 
   // 对话框状态
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMerchant, setEditingMerchant] = useState<AdminMerchant | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    settingsApi
+      .adminGetSettings()
+      .then((res) => setGlobalCollectionEnabled(res.data.collection_enabled))
+      .catch(() => {});
+  }, []);
 
   const fetchMerchants = useCallback(async () => {
     try {
@@ -225,6 +234,7 @@ export const AdminMerchantsPage: React.FC = () => {
         onSubmitCreate={handleSubmitCreate}
         onSubmitUpdate={handleSubmitUpdate}
         loading={submitting}
+        globalCollectionEnabled={globalCollectionEnabled}
       />
     </div>
   );

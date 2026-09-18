@@ -2,4 +2,19 @@ package errcode
 
 import "net/http"
 
-var RegistrationDisabled = &Error{200018, http.StatusForbidden, "注册暂未开放"}
+var (
+	RegistrationDisabled = &Error{200018, http.StatusForbidden, "注册暂未开放"}
+
+	InvalidCredentials = &Error{200001, http.StatusUnauthorized, "用户名或密码错误"}
+	AuthRequired       = &Error{200002, http.StatusUnauthorized, "需要登录"}
+	AccessExpired      = &Error{200003, http.StatusUnauthorized, "访问令牌已过期"}
+	UserFrozen         = &Error{200005, http.StatusForbidden, "账号已冻结"}
+	PermissionDenied   = &Error{200006, http.StatusForbidden, "没有权限"}
+	InvalidToken       = &Error{200009, http.StatusUnauthorized, "令牌无效"}
+	MailRequired       = &Error{200011, http.StatusForbidden, "请先完成邮箱验证"}
+	TokenRevoked       = &Error{200017, http.StatusUnauthorized, "令牌已撤销"}
+
+	InvalidUsername       = &Error{300001, http.StatusBadRequest, "用户名不合法"}
+	UsernameAlreadyExists = &Error{300002, http.StatusConflict, "用户名已存在"}
+	VerifyPasswordFailed  = &Error{300003, http.StatusUnauthorized, "验证密码失败"}
+)

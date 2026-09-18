@@ -61,9 +61,16 @@ export const MerchantTable: React.FC<MerchantTableProps> = ({
                 )}
                 {isAdmin && (
                   <td className="py-3.5 px-4">
-                    <Badge variant={adminM.collection_enabled ? 'blue' : 'gray'}>
-                      {adminM.collection_enabled ? '已允许' : '未允许'}
-                    </Badge>
+                    <div className="space-y-1">
+                      <Badge variant={adminM.collection_enabled ? 'blue' : 'gray'}>
+                        {adminM.collection_enabled ? '已允许' : '未允许'}
+                      </Badge>
+                      {!adminM.enabled && adminM.collection_enabled && (
+                        <span className="block text-[11px] text-amber-600 whitespace-nowrap">
+                          商家已停用，库存不会采集
+                        </span>
+                      )}
+                    </div>
                   </td>
                 )}
                 {isAdmin && (

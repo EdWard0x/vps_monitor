@@ -6,15 +6,17 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+	"vpsmonitor/model/dto"
 
-	"github.com/shopspring/decimal"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"vpsmonitor/model/entity"
 	"vpsmonitor/model/errcode"
 	"vpsmonitor/model/request"
 	"vpsmonitor/model/response"
 	"vpsmonitor/utils/pagination"
+
+	"github.com/shopspring/decimal"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type VPSService struct{ DB *gorm.DB }
@@ -341,4 +343,24 @@ func (s *VPSService) CollectionAllowed(ctx context.Context, rawID string) (bool,
 		return false, catalogDBError(err)
 	}
 	return count > 0, nil
+}
+
+func (s *VPSService) ListCollectionTargets(ctx context.Context) ([]dto.CollectionTask, error) {
+	var ct []dto.CollectionTask
+	err := s.DB.WithContext(ctx).Model(&entity.VPS{}).
+		Select("vps_detail.id as vps_id,merchant.code as merchant_code,vps_detail.purchase_url as source_url").
+		Joins("join merchant on vps_detail.merchant_id = merchant.id").
+		Where(
+			"vps_detail.deleted_at IS NULL AND "+
+				"merchant.deleted_at IS NULL AND "+
+				"vps_detail.enabled = ? AND "+
+				"vps_detail.collection_enabled = ? AND "+
+				"merchant.enabled = ? AND "+
+				"merchant.collection_enabled = ?", true, true, true, true).
+		Where("EXISTS (SELECT 1 FROM site_settings WHERE deleted_at IS NULL AND collection_enabled = ?)", true).
+		Scan(&ct).Error
+	if err != nil {
+		return nil, catalogDBError(err)
+	}
+	return ct, nil
 }

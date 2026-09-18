@@ -2,9 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { VPS } from '@/types/vps';
 import { StockBadge } from '@/components/common/StockBadge';
+import { StaleAlert } from '@/components/common/StaleAlert';
 import { formatPrice } from '@/lib/format/money';
 import { formatMemory, formatDisk, formatPort, formatTransfer } from '@/lib/format/specs';
-import { formatDate } from '@/lib/format/date';
+import { formatDate, formatRelativeTime } from '@/lib/format/date';
 import { isSafeExternalUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import {
@@ -16,6 +17,7 @@ import {
   Calendar,
   Store,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
 
 export interface VpsDetailCardProps {
@@ -46,13 +48,25 @@ export const VpsDetailCard: React.FC<VpsDetailCardProps> = ({ vps }) => {
           </h1>
         </div>
 
-        <div className="flex flex-col sm:items-end gap-2">
+        <div className="flex flex-col sm:items-end gap-1.5">
           <StockBadge stock={vps.stock} />
-          <div className="text-2xl font-black text-gray-900">
+          <div className="text-xs text-gray-500 flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-gray-400">上次检查：</span>
+            <span
+              className="font-medium text-gray-700"
+              title={vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : undefined}
+            >
+              {vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : '尚未获得采集结果'}
+            </span>
+          </div>
+          <div className="text-2xl font-black text-gray-900 mt-0.5">
             {formatPrice(vps.price_amount, vps.currency, vps.billing_period)}
           </div>
         </div>
       </div>
+
+      <StaleAlert stock={vps.stock} />
 
       {/* 规格参数网格 */}
       <div>
@@ -123,17 +137,29 @@ export const VpsDetailCard: React.FC<VpsDetailCardProps> = ({ vps }) => {
           <div className="bg-gray-50/80 rounded-2xl p-4 border border-gray-100">
             <div className="flex items-center space-x-2 text-gray-400 text-xs font-semibold uppercase">
               <Calendar className="w-4 h-4 text-brand-500" />
-              <span>最后核查时间</span>
+              <span>上次检查时间</span>
             </div>
-            <p className="text-sm font-semibold text-gray-700 mt-2 truncate">
-              {vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : '尚未检查'}
+            <p
+              className="text-sm font-semibold text-gray-700 mt-2 truncate"
+              title={vps.stock?.last_checked_at ? formatDate(vps.stock.last_checked_at) : undefined}
+            >
+              {vps.stock?.last_checked_at ? (
+                <>
+                  <span>{formatDate(vps.stock.last_checked_at)}</span>
+                  <span className="text-xs text-gray-400 ml-1.5 font-normal">
+                    ({formatRelativeTime(vps.stock.last_checked_at)})
+                  </span>
+                </>
+              ) : (
+                '尚未获得采集结果'
+              )}
             </p>
           </div>
 
           <div className="bg-gray-50/80 rounded-2xl p-4 border border-gray-100">
             <div className="flex items-center space-x-2 text-gray-400 text-xs font-semibold uppercase">
               <Calendar className="w-4 h-4 text-brand-500" />
-              <span>最近有货时间</span>
+              <span>最后有货时间</span>
             </div>
             <p className="text-sm font-semibold text-gray-700 mt-2 truncate">
               {vps.stock?.last_in_stock_at ? formatDate(vps.stock.last_in_stock_at) : '暂无有货记录'}
@@ -155,7 +181,7 @@ export const VpsDetailCard: React.FC<VpsDetailCardProps> = ({ vps }) => {
       {/* 底部购买行动呼吁 */}
       <div className="border-t border-gray-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-xs text-gray-400">
-          价格与库存信息由外部监控程序自动汇报采集，下单前请以服务商官方页面为准。
+          价格与库存信息由后台库存采集自动同步，下单前请以服务商官方页面为准。
         </div>
 
         {vps.purchase_url && isSafeExternalUrl(vps.purchase_url) && (

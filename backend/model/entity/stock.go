@@ -1,18 +1,19 @@
 package entity
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Stock struct {
 	gorm.Model
-	VPSID              uint `gorm:"uniqueIndex;not null"`
-	Status             int  `gorm:"not null;default:3"`
-	Quantity           *int
-	LastCheckedAt      *time.Time
-	LastInStockAt      *time.Time
-	ObservationVersion uint64
+	VPSID         uint `gorm:"uniqueIndex;not null"`
+	Status        int  `gorm:"not null;default:3"`
+	Quantity      *int
+	LastCheckedAt *time.Time
+	LastInStockAt *time.Time
+	DeliveryID    string `gorm:"size:64;not null" json:"-"`
 }
 
 func (Stock) TableName() string { return "vps_stocks" }

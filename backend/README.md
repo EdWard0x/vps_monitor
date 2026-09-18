@@ -22,7 +22,7 @@ go run ./cmd/migrate up --dir migrations
 go run ./cmd/api
 ```
 
-服务不会默认迁移数据库，也不会运行 seed。`GET /health/live` 只检查进程；`GET /health/ready` 会检查 PostgreSQL、当前 1–3 号迁移和 Redis，任一未就绪时返回 503。
+服务不会默认迁移数据库，也不会运行 seed。`GET /health/live` 只检查进程；`GET /health/ready` 会检查 PostgreSQL、当前 `001_initial` 基线迁移和 Redis，任一未就绪时返回 503。
 
 `APP_MODE=skeleton` 仅用于无外部依赖的路由/失败关闭测试：此模式 ready 返回 503，业务服务返回 501。正常运行使用默认的 `APP_MODE=runtime`。
 

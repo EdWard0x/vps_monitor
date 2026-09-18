@@ -5,11 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	authiface "vpsmonitor/iface/auth"
 	mailiface "vpsmonitor/iface/mail"
 	"vpsmonitor/model/entity"
@@ -17,6 +12,12 @@ import (
 	"vpsmonitor/model/request"
 	"vpsmonitor/model/response"
 	mailutil "vpsmonitor/utils/mail"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type MailService struct {
@@ -104,7 +105,7 @@ func (s *MailService) SendCode(ctx context.Context, userID string, in request.Ma
 		if err := tx.Create(&verification).Error; err != nil {
 			return errcode.DatabaseError
 		}
-		if err := s.sender.Send(ctx, mailiface.Message{To: []string{address}, Subject: "VPS Monitor 邮箱验证码", TextBody: "你的邮箱验证码为：" + code + "\n有效期为 10 分钟。请勿向他人透露验证码。如非本人操作，请忽略此邮件。"}); err != nil {
+		if err := s.sender.Send(ctx, mailiface.Message{To: []string{address}, Subject: "VPS Monitor 邮箱验证码", TextBody: "你的邮箱验证码为：" + code + "\r\n有效期为 10 分钟。请勿向他人透露验证码。如非本人操作，请忽略此邮件。"}); err != nil {
 			return errcode.MailUnavailable
 		}
 		if err := tx.Model(&entity.MailVerification{}).Where("user_id = ? AND id <> ? AND consumed_at IS NULL", user.ID, verification.ID).Update("consumed_at", now).Error; err != nil {

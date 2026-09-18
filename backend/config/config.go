@@ -24,6 +24,7 @@ type HTTP struct {
 	CSRFCookieName   string
 	CSRFCookieSecure bool
 	RateLimitEnabled bool
+	FlareResolverUrl string
 }
 type Database struct {
 	URL          string
@@ -98,6 +99,7 @@ func Load() (Config, error) {
 			CSRFCookieName:   env("CSRF_COOKIE_NAME", defaultCSRFCookieName),
 			CSRFCookieSecure: secureCookies,
 			RateLimitEnabled: boolean("RATE_LIMIT_ENABLED", true),
+			FlareResolverUrl: env("FLARE_RESOLVER_URL", "http://localhost:8191/v1"),
 		},
 		Database: Database{
 			URL:          os.Getenv("DATABASE_URL"),

@@ -197,7 +197,7 @@ export const AdminDashboardPage: React.FC = () => {
               <span className="text-3xl font-extrabold text-amber-600">
                 {data.unknown_stock_count}
               </span>
-              <span className="text-xs text-gray-400">待外部同步</span>
+              <span className="text-xs text-gray-400">待后台采集</span>
             </div>
           </div>
         </div>

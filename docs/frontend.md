@@ -1,5 +1,7 @@
 # VPS Monitor 前端开发需求文档
 
+> 库存采集 Worker 已接入后的前端同步要求，请优先参阅 [frontend-collection-sync.md](./frontend-collection-sync.md)。本文中“采集尚未实现”“未来采集”等旧描述不再作为该功能的实现依据。
+
 本文可直接交给前端开发模型执行，是开发需求，不是完成报告。目标是基于后端现有 router 接口完成真实可用的前端。后端实施范围见 `backend.md`；前后端联调时以更新后的实际接口与 OpenAPI 为准，发现缺口应明确列出，不能用 mock 隐藏问题。
 
 ## 一、核心要求

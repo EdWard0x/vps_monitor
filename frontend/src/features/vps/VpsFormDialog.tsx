@@ -38,16 +38,16 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [cpuCores, setCpuCores] = useState(1);
-  const [memoryMb, setMemoryMb] = useState(1024);
-  const [diskGb, setDiskGb] = useState(20);
+  const [cpuCores, setCpuCores] = useState<number | string>(1);
+  const [memoryMb, setMemoryMb] = useState<number | string>(1024);
+  const [diskGb, setDiskGb] = useState<number | string>(20);
   const [diskType, setDiskType] = useState<DiskType>('ssd');
   const [transferGb, setTransferGb] = useState<string>('');
   const [portMbps, setPortMbps] = useState<string>('');
   const [hasIpv4, setHasIpv4] = useState(true);
-  const [ipv4Count, setIpv4Count] = useState(1);
+  const [ipv4Count, setIpv4Count] = useState<number | string>(1);
   const [hasIpv6, setHasIpv6] = useState(false);
-  const [ipv6Count, setIpv6Count] = useState(0);
+  const [ipv6Count, setIpv6Count] = useState<number | string>(0);
   const [priceAmount, setPriceAmount] = useState('0.00');
   const [currency, setCurrency] = useState('USD');
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
@@ -114,16 +114,16 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
         code: code.toLowerCase().trim(),
         name: name.trim(),
         description: description.trim(),
-        cpu_cores: Number(cpuCores),
-        memory_mb: Number(memoryMb),
-        disk_gb: Number(diskGb),
+        cpu_cores: Math.max(1, Number(cpuCores) || 1),
+        memory_mb: Math.max(1, Number(memoryMb) || 1),
+        disk_gb: Math.max(0, Number(diskGb) || 0),
         disk_type: diskType,
         transfer_gb: parsedTransfer,
         port_mbps: parsedPort,
         has_ipv4: hasIpv4,
-        ipv4_count: hasIpv4 ? Number(ipv4Count) : 0,
+        ipv4_count: hasIpv4 ? Math.max(1, Number(ipv4Count) || 1) : 0,
         has_ipv6: hasIpv6,
-        ipv6_count: hasIpv6 ? Number(ipv6Count) : 0,
+        ipv6_count: hasIpv6 ? Math.max(1, Number(ipv6Count) || 1) : 0,
         price_amount: priceAmount.trim(),
         currency: currency.trim(),
         billing_period: billingPeriod,
@@ -137,16 +137,16 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
         code: code.toLowerCase().trim(),
         name: name.trim(),
         description: description.trim(),
-        cpu_cores: Number(cpuCores),
-        memory_mb: Number(memoryMb),
-        disk_gb: Number(diskGb),
+        cpu_cores: Math.max(1, Number(cpuCores) || 1),
+        memory_mb: Math.max(1, Number(memoryMb) || 1),
+        disk_gb: Math.max(0, Number(diskGb) || 0),
         disk_type: diskType,
         transfer_gb: parsedTransfer,
         port_mbps: parsedPort,
         has_ipv4: hasIpv4,
-        ipv4_count: hasIpv4 ? Number(ipv4Count) : 0,
+        ipv4_count: hasIpv4 ? Math.max(1, Number(ipv4Count) || 1) : 0,
         has_ipv6: hasIpv6,
-        ipv6_count: hasIpv6 ? Number(ipv6Count) : 0,
+        ipv6_count: hasIpv6 ? Math.max(1, Number(ipv6Count) || 1) : 0,
         price_amount: priceAmount.trim(),
         currency: currency.trim(),
         billing_period: billingPeriod,
@@ -226,7 +226,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
               type="number"
               min={1}
               value={cpuCores}
-              onChange={(e) => setCpuCores(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              onChange={(e) => setCpuCores(e.target.value)}
               disabled={loading}
               required
             />
@@ -238,10 +238,9 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
             </label>
             <Input
               type="number"
-              min={64}
-              step={128}
+              min={1}
               value={memoryMb}
-              onChange={(e) => setMemoryMb(Math.max(64, parseInt(e.target.value, 10) || 64))}
+              onChange={(e) => setMemoryMb(e.target.value)}
               disabled={loading}
               required
             />
@@ -255,7 +254,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
               type="number"
               min={0}
               value={diskGb}
-              onChange={(e) => setDiskGb(Math.max(0, parseInt(e.target.value, 10) || 0))}
+              onChange={(e) => setDiskGb(e.target.value)}
               disabled={loading}
               required
             />
@@ -395,7 +394,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
                   const checked = e.target.checked;
                   setHasIpv4(checked);
                   if (!checked) setIpv4Count(0);
-                  else if (ipv4Count === 0) setIpv4Count(1);
+                  else if (Number(ipv4Count) === 0) setIpv4Count(1);
                 }}
                 disabled={loading}
               />
@@ -406,7 +405,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
                 type="number"
                 min={1}
                 value={ipv4Count}
-                onChange={(e) => setIpv4Count(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => setIpv4Count(e.target.value)}
                 disabled={loading}
                 placeholder="IPv4 数量"
                 required
@@ -424,7 +423,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
                   const checked = e.target.checked;
                   setHasIpv6(checked);
                   if (!checked) setIpv6Count(0);
-                  else if (ipv6Count === 0) setIpv6Count(1);
+                  else if (Number(ipv6Count) === 0) setIpv6Count(1);
                 }}
                 disabled={loading}
               />
@@ -435,7 +434,7 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
                 type="number"
                 min={1}
                 value={ipv6Count}
-                onChange={(e) => setIpv6Count(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => setIpv6Count(e.target.value)}
                 disabled={loading}
                 placeholder="IPv6 数量"
                 required
@@ -474,17 +473,14 @@ export const VpsFormDialog: React.FC<VpsFormDialogProps> = ({
               <div>
                 <span className="text-sm font-medium text-gray-700 block">允许采集该套餐</span>
                 <span className="text-xs text-gray-400 block mt-0.5">
-                  套餐级采集许可。未来执行需要全局、商家、套餐三级均开启；上级关闭时此处配置依旧保留。
+                  套餐级采集许可。实际采集需要全局、所属商家、VPS 套餐三级均开启；上级关闭时此处配置依旧保留。
                 </span>
               </div>
             </label>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2">
-              采集配置可保存，实际采集功能待接入。
-            </p>
           </div>
         </div>
 
-        <div className="flex justify-end space-x-2 pt-4 border-t border-gray-100">
+        <div className="flex justify-end space-x-2 pt-3 pb-1 border-t border-gray-100 sticky bottom-0 bg-white/95 backdrop-blur-xs mt-3">
           <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
             取消
           </Button>

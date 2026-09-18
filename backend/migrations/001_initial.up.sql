@@ -47,7 +47,8 @@ CREATE TABLE merchant (
     code varchar(64) NOT NULL UNIQUE,
     name varchar(128) NOT NULL,
     website_url text NOT NULL,
-    enabled boolean NOT NULL DEFAULT true
+    enabled boolean NOT NULL DEFAULT true,
+    collection_enabled boolean NOT NULL DEFAULT false
 );
 
 -- migrate:split
@@ -81,6 +82,7 @@ CREATE TABLE vps_detail (
     billing_period varchar(32) NOT NULL,
     purchase_url text NOT NULL,
     enabled boolean NOT NULL DEFAULT true,
+    collection_enabled boolean NOT NULL DEFAULT false,
     CONSTRAINT fk_vps_merchant FOREIGN KEY (merchant_id) REFERENCES merchant(id) ON DELETE RESTRICT,
     CONSTRAINT uq_vps_merchant_code UNIQUE (merchant_id, code),
     CONSTRAINT ck_vps_cpu CHECK (cpu_cores > 0),
@@ -89,8 +91,13 @@ CREATE TABLE vps_detail (
     CONSTRAINT ck_vps_transfer CHECK (transfer_gb IS NULL OR transfer_gb >= 0),
     CONSTRAINT ck_vps_port CHECK (port_mbps IS NULL OR port_mbps >= 0),
     CONSTRAINT ck_vps_ip_counts CHECK (ipv4_count >= 0 AND ipv6_count >= 0),
+    CONSTRAINT ck_vps_ip_flags CHECK (
+        has_ipv4 = (ipv4_count > 0)
+        AND has_ipv6 = (ipv6_count > 0)
+    ),
     CONSTRAINT ck_vps_price CHECK (price_amount >= 0),
-    CONSTRAINT ck_vps_currency CHECK (currency ~ '^[A-Z]{3}$')
+    CONSTRAINT ck_vps_currency CHECK (currency ~ '^[A-Z]{3}$'),
+    CONSTRAINT ck_vps_billing_period CHECK (billing_period IN ('monthly', 'quarterly', 'yearly', 'one_time'))
 );
 
 -- migrate:split
@@ -110,11 +117,11 @@ CREATE TABLE vps_stocks (
     quantity integer,
     last_checked_at timestamptz,
     last_in_stock_at timestamptz,
-    observation_version bigint NOT NULL DEFAULT 0,
+    delivery_id varchar(64) NOT NULL,
     CONSTRAINT fk_stock_vps FOREIGN KEY (vps_id) REFERENCES vps_detail(id) ON DELETE RESTRICT,
     CONSTRAINT ck_stock_status CHECK (status IN (1, 2, 3)),
     CONSTRAINT ck_stock_quantity CHECK (quantity IS NULL OR quantity >= 0),
-    CONSTRAINT ck_stock_observation_version CHECK (observation_version >= 0)
+    CONSTRAINT ck_stock_delivery_id CHECK (delivery_id ~ '^[0-9]+-[0-9]+$')
 );
 
 -- migrate:split
@@ -130,7 +137,8 @@ CREATE TABLE site_settings (
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz,
     site_name varchar(128) NOT NULL,
-    registration_enabled boolean NOT NULL DEFAULT false
+    registration_enabled boolean NOT NULL DEFAULT false,
+    collection_enabled boolean NOT NULL DEFAULT false
 );
 
 -- migrate:split
@@ -142,13 +150,16 @@ CREATE TABLE user_mail_verifications (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz,
+    public_id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
     user_id bigint NOT NULL,
     mail varchar(320) NOT NULL,
     code_hash text NOT NULL,
     expires_at timestamptz NOT NULL,
     consumed_at timestamptz,
+    failed_attempts integer NOT NULL DEFAULT 0,
     CONSTRAINT fk_mail_verification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT ck_mail_verification_expiry CHECK (expires_at > created_at)
+    CONSTRAINT ck_mail_verification_expiry CHECK (expires_at > created_at),
+    CONSTRAINT ck_mail_verification_failed_attempts CHECK (failed_attempts >= 0)
 );
 
 -- migrate:split
@@ -163,12 +174,15 @@ CREATE TABLE password_reset_requests (
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz,
+    public_id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE,
     user_id bigint NOT NULL,
     code_hash text NOT NULL,
     expires_at timestamptz NOT NULL,
     consumed_at timestamptz,
+    failed_attempts integer NOT NULL DEFAULT 0,
     CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
-    CONSTRAINT ck_password_reset_expiry CHECK (expires_at > created_at)
+    CONSTRAINT ck_password_reset_expiry CHECK (expires_at > created_at),
+    CONSTRAINT ck_password_reset_failed_attempts CHECK (failed_attempts >= 0)
 );
 
 -- migrate:split
@@ -178,5 +192,5 @@ CREATE INDEX idx_password_reset_user ON password_reset_requests (user_id, create
 CREATE INDEX idx_password_reset_expiry ON password_reset_requests (expires_at) WHERE consumed_at IS NULL AND deleted_at IS NULL;
 
 -- migrate:split
-INSERT INTO site_settings (site_name, registration_enabled)
-VALUES ('VPS Monitor', false);
+INSERT INTO site_settings (site_name, registration_enabled, collection_enabled)
+VALUES ('VPS Monitor', false, false);

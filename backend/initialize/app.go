@@ -89,7 +89,7 @@ func New(cfg config.Config) (*App, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			var migrationCount, firstVersion, lastVersion int
-			if err := raw.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&migrationCount, &firstVersion, &lastVersion); err != nil || migrationCount != 3 || firstVersion != 1 || lastVersion != 3 {
+			if err := raw.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&migrationCount, &firstVersion, &lastVersion); err != nil || migrationCount != 1 || firstVersion != 1 || lastVersion != 1 {
 				return false
 			}
 			return redisConnection.Ping(ctx) == nil

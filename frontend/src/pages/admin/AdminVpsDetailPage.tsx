@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { AdminVPS, BillingPeriod, DiskType } from '@/types/vps';
-import { Merchant } from '@/types/merchant';
+import { Merchant, AdminMerchant } from '@/types/merchant';
+import { AdminSettings } from '@/types/settings';
 import * as vpsApi from '@/api/vps';
 import * as merchantApi from '@/api/merchant';
+import * as settingsApi from '@/api/settings';
 import { StockBadge } from '@/components/common/StockBadge';
+import { Badge } from '@/components/ui/Badge';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -24,6 +27,8 @@ export const AdminVpsDetailPage: React.FC = () => {
 
   const [vps, setVps] = useState<AdminVPS | null>(null);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
+  const [currentMerchant, setCurrentMerchant] = useState<AdminMerchant | null>(null);
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,16 +39,16 @@ export const AdminVpsDetailPage: React.FC = () => {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [cpuCores, setCpuCores] = useState(1);
-  const [memoryMb, setMemoryMb] = useState(1024);
-  const [diskGb, setDiskGb] = useState(20);
+  const [cpuCores, setCpuCores] = useState<number | string>(1);
+  const [memoryMb, setMemoryMb] = useState<number | string>(1024);
+  const [diskGb, setDiskGb] = useState<number | string>(20);
   const [diskType, setDiskType] = useState<DiskType>('ssd');
   const [transferGb, setTransferGb] = useState<string>('');
   const [portMbps, setPortMbps] = useState<string>('');
   const [hasIpv4, setHasIpv4] = useState(true);
-  const [ipv4Count, setIpv4Count] = useState(1);
+  const [ipv4Count, setIpv4Count] = useState<number | string>(1);
   const [hasIpv6, setHasIpv6] = useState(false);
-  const [ipv6Count, setIpv6Count] = useState(0);
+  const [ipv6Count, setIpv6Count] = useState<number | string>(0);
   const [priceAmount, setPriceAmount] = useState('0.00');
   const [currency, setCurrency] = useState('USD');
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
@@ -77,6 +82,76 @@ export const AdminVpsDetailPage: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    settingsApi
+      .adminGetSettings()
+      .then((res) => setSettings(res.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!merchantId) {
+      setCurrentMerchant(null);
+      return;
+    }
+    merchantApi
+      .adminGetMerchant(merchantId)
+      .then((res) => setCurrentMerchant(res.data))
+      .catch(() => setCurrentMerchant(null));
+  }, [merchantId]);
+
+  const collectionStatus = (() => {
+    if (settings && !settings.collector_implemented) {
+      return {
+        text: '后端采集能力不可用',
+        variant: 'yellow' as const,
+        reason: '系统尚未具备或部署采集能力，保存配置后暂不会产生采集结果。',
+      };
+    }
+    if (settings && !settings.collection_enabled) {
+      return {
+        text: '全局采集已停用',
+        variant: 'yellow' as const,
+        reason: '系统全局采集总开关已关闭，所有套餐库存采集均不会执行。',
+      };
+    }
+    if (currentMerchant) {
+      if (!currentMerchant.enabled) {
+        return {
+          text: '商家已停用，库存不会采集',
+          variant: 'yellow' as const,
+          reason: '所属商家已被停用，其名下套餐均不会执行库存采集。',
+        };
+      }
+      if (!currentMerchant.collection_enabled) {
+        return {
+          text: '商家采集已停用',
+          variant: 'yellow' as const,
+          reason: '所属商家的采集开关已关闭。',
+        };
+      }
+    }
+    if (!enabled) {
+      return {
+        text: 'VPS 已停用，库存不会采集',
+        variant: 'gray' as const,
+        reason: '此 VPS 套餐已下架停用。',
+      };
+    }
+    if (!collectionEnabled) {
+      return {
+        text: '此 VPS 未启用采集',
+        variant: 'gray' as const,
+        reason: '此套餐自身未开启库存采集许可。',
+      };
+    }
+    return {
+      text: '已允许后台采集',
+      variant: 'green' as const,
+      reason: '全局、商家与套餐三级开关均已满足条件，后台调度器将周期性自动创建采集任务。',
+    };
+  })();
 
   useEffect(() => {
     if (!id) return;
@@ -135,16 +210,16 @@ export const AdminVpsDetailPage: React.FC = () => {
         code: code.toLowerCase().trim(),
         name: name.trim(),
         description: description.trim(),
-        cpu_cores: Number(cpuCores),
-        memory_mb: Number(memoryMb),
-        disk_gb: Number(diskGb),
+        cpu_cores: Math.max(1, Number(cpuCores) || 1),
+        memory_mb: Math.max(1, Number(memoryMb) || 1),
+        disk_gb: Math.max(0, Number(diskGb) || 0),
         disk_type: diskType,
         transfer_gb: parsedTransfer,
         port_mbps: parsedPort,
         has_ipv4: hasIpv4,
-        ipv4_count: hasIpv4 ? Number(ipv4Count) : 0,
+        ipv4_count: hasIpv4 ? Math.max(1, Number(ipv4Count) || 1) : 0,
         has_ipv6: hasIpv6,
-        ipv6_count: hasIpv6 ? Number(ipv6Count) : 0,
+        ipv6_count: hasIpv6 ? Math.max(1, Number(ipv6Count) || 1) : 0,
         price_amount: priceAmount.trim(),
         currency: currency.trim(),
         billing_period: billingPeriod,
@@ -224,7 +299,8 @@ export const AdminVpsDetailPage: React.FC = () => {
           </h1>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+          <Badge variant={collectionStatus.variant}>{collectionStatus.text}</Badge>
           <StockBadge stock={vps.stock} />
         </div>
       </div>
@@ -293,7 +369,7 @@ export const AdminVpsDetailPage: React.FC = () => {
               type="number"
               min={1}
               value={cpuCores}
-              onChange={(e) => setCpuCores(Number(e.target.value))}
+              onChange={(e) => setCpuCores(e.target.value)}
               disabled={saving}
               required
             />
@@ -305,10 +381,9 @@ export const AdminVpsDetailPage: React.FC = () => {
             </label>
             <Input
               type="number"
-              min={64}
-              step={128}
+              min={1}
               value={memoryMb}
-              onChange={(e) => setMemoryMb(Number(e.target.value))}
+              onChange={(e) => setMemoryMb(e.target.value)}
               disabled={saving}
               required
             />
@@ -322,7 +397,7 @@ export const AdminVpsDetailPage: React.FC = () => {
               type="number"
               min={0}
               value={diskGb}
-              onChange={(e) => setDiskGb(Number(e.target.value))}
+              onChange={(e) => setDiskGb(e.target.value)}
               disabled={saving}
               required
             />
@@ -460,7 +535,7 @@ export const AdminVpsDetailPage: React.FC = () => {
                   const checked = e.target.checked;
                   setHasIpv4(checked);
                   if (!checked) setIpv4Count(0);
-                  else if (ipv4Count === 0) setIpv4Count(1);
+                  else if (Number(ipv4Count) === 0) setIpv4Count(1);
                 }}
                 disabled={saving}
               />
@@ -471,7 +546,7 @@ export const AdminVpsDetailPage: React.FC = () => {
                 type="number"
                 min={1}
                 value={ipv4Count}
-                onChange={(e) => setIpv4Count(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => setIpv4Count(e.target.value)}
                 disabled={saving}
                 placeholder="IPv4 数量"
                 required
@@ -489,7 +564,7 @@ export const AdminVpsDetailPage: React.FC = () => {
                   const checked = e.target.checked;
                   setHasIpv6(checked);
                   if (!checked) setIpv6Count(0);
-                  else if (ipv6Count === 0) setIpv6Count(1);
+                  else if (Number(ipv6Count) === 0) setIpv6Count(1);
                 }}
                 disabled={saving}
               />
@@ -500,7 +575,7 @@ export const AdminVpsDetailPage: React.FC = () => {
                 type="number"
                 min={1}
                 value={ipv6Count}
-                onChange={(e) => setIpv6Count(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => setIpv6Count(e.target.value)}
                 disabled={saving}
                 placeholder="IPv6 数量"
                 required
@@ -528,7 +603,7 @@ export const AdminVpsDetailPage: React.FC = () => {
             )}
           </div>
 
-          <div className="pt-3 border-t border-gray-100">
+          <div className="pt-3 border-t border-gray-100 space-y-3">
             <label className="flex items-start space-x-2 cursor-pointer">
               <Checkbox
                 checked={collectionEnabled}
@@ -539,13 +614,18 @@ export const AdminVpsDetailPage: React.FC = () => {
               <div>
                 <span className="text-sm font-medium text-gray-700 block">允许采集该套餐</span>
                 <span className="text-xs text-gray-400 block mt-0.5">
-                  套餐级采集许可。未来执行需全局、所属商家、该套餐三级均开启；上级关闭时此处配置依旧保留。
+                  套餐级采集许可。实际采集需全局、所属商家、该套餐三级均开启；上级关闭时此处配置依旧保留。
                 </span>
               </div>
             </label>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mt-2">
-              采集配置可保存，实际采集功能待接入。
-            </p>
+
+            <div className="p-3.5 bg-gray-50/90 border border-gray-200 rounded-xl space-y-1.5">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-semibold text-gray-600">最终采集条件：</span>
+                <Badge variant={collectionStatus.variant}>{collectionStatus.text}</Badge>
+              </div>
+              <p className="text-xs text-gray-500">{collectionStatus.reason}</p>
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,7 @@
 # 后端业务验收
 
+> 历史验收范围记录：以下“采集未实现”等结论已过时，不代表当前版本通过情况。最新代码行为见 [后端技术文档](../docs/backend.md)，本次实际验证及未验证项见 [known-issues.md](../docs/known-issues.md)。
+
 当前 runtime 实现的验收范围：
 
 - `/api/v1` 下的认证、个人中心、用户/冻结管理、商家、VPS、库存只读、设置和看板路由均连接真实 service 与 PostgreSQL/Redis 依赖。

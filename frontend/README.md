@@ -10,7 +10,7 @@ npm ci
 npm run dev
 ```
 
-开发服务器将 `/api` 代理到 `http://127.0.0.1:8080`。如需直连其他后端，可设置 `VITE_API_BASE_URL`。请求始终携带 Cookie；Access Token 仅保存在内存，Refresh Token 由后端 HttpOnly Cookie 管理。
+开发服务器将 `/api` 代理到 `http://127.0.0.1:8080`。普通请求支持 `VITE_API_BASE_URL`，但当前启动认证仍默认 `/api/v1`，直连其他地址前需统一配置路径，详见 [`../docs/frontend.md`](../docs/frontend.md)。请求始终携带 Cookie；Access Token 仅保存在内存，Refresh Token 由后端 HttpOnly Cookie 管理。
 
 运行时默认不启用 MSW 或演示数据。`src/mocks` 只用于显式预览/测试，只有手工调用 `enableMocking()` 且设置 `VITE_MOCK_API=true` 才会启用。
 
@@ -21,4 +21,4 @@ npm test
 npm run build
 ```
 
-业务类型和错误码应与 [`../docs/openapi.yaml`](../docs/openapi.yaml) 保持一致。当前采集器未接入：后台可以保存全局、商家和 VPS 三层采集许可，但 `collector_implemented=false` 时界面只说明配置已保存，不显示采集进度或成功状态。
+业务类型和错误码应与 [`../docs/openapi.yaml`](../docs/openapi.yaml) 保持一致。后端已接入采集，当前 `collector_implemented=true`，只表示代码能力，不表示 Worker 在线。前端保存三级采集许可并通过 HTTP 查询库存，不连接 Redis。完整页面/状态说明见 [`../docs/frontend.md`](../docs/frontend.md)，联调速查见 [`../docs/frontend-collection-sync.md`](../docs/frontend-collection-sync.md)。

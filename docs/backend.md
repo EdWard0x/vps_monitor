@@ -1,207 +1,187 @@
-# VPS Monitor 后端开发需求文档
+# VPS Monitor 后端技术文档
 
-本文是交给后端开发模型的需求与实施说明，不是功能已完成或测试已通过的报告。请以 `backend/router` 目录逐文件梳理功能，沿用项目已有实现的代码风格，补齐关联模块。前端开发需求见同目录 `frontend.md`。
+本文以 2026-09-19 工作区实现为准。接口见 [api.md](api.md)，Worker 见 [collection.md](collection.md)，运行参数见 [deployment.md](deployment.md)。
 
-## 一、目标和范围
+## 1. 进程与装配
 
-完成现有 router 对应的全部业务能力，使管理员可以通过真实接口管理用户、录入商家和 VPS、调整站点设置，并保存是否允许采集的配置。接口涉及其他模块时，应一并完成依赖，不能只补路由或返回假成功。
-
-**维护者自行完成的部分必须预留：VPS 是否有货的采集、库存更新，以及直接服务于这些工作的调度、库存消息消费和确认逻辑。** 本次不编写抓取网页、解析有货状态、模拟库存、定时更新库存等实现。
-
-保留正常的库存查询和展示能力。没有库存记录代表“未知”，不得为了让页面有数据而生成库存。采集开关可保存，但在实际采集器接入前不能宣称采集已经启动。
-
-## 二、实施约束
-
-- 保持 Go/Gin/GORM/PostgreSQL/Redis 技术栈，延续 `router → api → service → model` 分层和构造器依赖注入方式。
-- router 负责注册路径和中间件；api 绑定参数、调用 service、封装响应；service 处理业务、事务、权限相关约束与数据库读写。
-- 使用现有 `model/request`、`model/response`、`model/entity`、`model/errcode`，避免建立第二套同类架构。
-- 先阅读已有实现并复用，修复缺失的业务闭环；保留维护者已有未提交改动，不整体覆盖文件或回退仓库。
-- 延续现有接口命名和路径。新需求优先扩展现有设置、商家和 VPS 接口，不擅自增加评论、设备会话、订阅或通知等功能。
-- 对现有数据库通过新增迁移升级，不改已执行迁移的内容；不默认运行种子数据，不自动发布。
-- 本文与旧骨架文档冲突时，以本文明确的目标为准：业务需要完成，只有采集和库存写入保留。
-
-## 三、统一接口约定
-
-业务路径前缀为 `/api/v1`，JSON 字段使用 snake_case。
-
-- ID 使用字符串，避免 JavaScript 大整数精度问题；验证码请求标识作为不透明字符串处理。
-- 时间使用 RFC3339；价格使用十进制字符串。
-- 成功响应：`{code:0,message:"ok",data,request_id}`。
-- 失败响应：`{code,message,data:null,request_id}`，配合正确 HTTP 状态；不得用成功响应承载占位业务。
-- 列表返回 `data={items,total,page,page_size}`；默认 page=1、page_size=20，最大 page_size=100，空列表返回 `items:[]`。
-- 普通业务成功 HTTP 200；忘记密码验证码申请 HTTP 202；删除成功仍返回统一包络且 data=null。
-- POST/PUT 业务参数放 JSON 请求体；详情、删除和筛选参数依现有路由放 query。
-- 公开、已登录、管理员权限必须在后端校验，不能依赖前端隐藏菜单。
-
-认证继续采用现有 AT/RT 设计：AT 在响应 JSON 中返回，前端只在内存中保存，调用受保护接口时携带 `Authorization: Bearer ...`；RT 放 HttpOnly Cookie，不放 JSON 或 localStorage。前端请求带 `credentials: include`。
-
-`GET /auth/csrf` 返回 `data.token` 并设置相应 Cookie。`/auth` 下写请求携带 `X-CSRF-Token`。受保护业务按现有 Bearer 约定处理，同时正确配置 CORS、Cookie 和可信代理。
-
-## 四、逐文件功能清单
-
-以下路径均省略 `/api/v1`。
-
-### router/auth.go
-
-| 方法与路径 | 输入 | 返回/要求 |
+| 入口 | 职责 | 关键说明 |
 | --- | --- | --- |
-| GET `/auth/csrf` | 无 | `{token}`，复用有效凭据 |
-| POST `/auth/register` | `{username,nickname,password}` | PublicUser；检查注册开关、输入和用户名唯一性 |
-| POST `/auth/login` | `{username,password}` | `{user:AccountUser,access_token,token_type,expires_in}`，设置 RT Cookie |
-| POST `/auth/refresh` | RT Cookie | `{access_token,token_type,expires_in}`，检查令牌、用户和冻结状态 |
-| POST `/auth/logout` | 无 | 清除当前浏览器 RT Cookie，data=null |
-| POST `/auth/password-reset/code` | `{mail}` | `{reset_id,expires_in,retry_after,message}` |
-| POST `/auth/password-reset/confirm` | `{reset_id,code,new_password}` | 修改密码并作废旧令牌，data=null |
+| `cmd/api` | HTTP 服务 | `config.Load → initialize.New → App.Run`，处理退出信号 |
+| `cmd/worker` | 调度、消费、Pending 清理 | 独立打开数据库和 Redis，注册 dmit、akko 采集器 |
+| `cmd/migrate` | up/down/status 迁移 | 显式执行，普通 API 启动不调用 |
+| `cmd/admin` | 创建候选人、提升角色 | 普通账号真实验证邮箱后再提升 |
+| `cmd/seed` | 保留入口 | RunSeed 返回 NotImplemented，不生成演示数据 |
 
-注册只创建普通用户，不能从请求体接受管理员角色。用户名需要归一化、校验和数据库唯一约束；密码哈希保存。沿用现有密码工具的规则，并使注册、改密、管理员重置和找回密码保持一致。
+`config.Load()` 从当前工作目录可选加载 `.env`，映射环境变量并校验。正常使用 `APP_MODE=runtime`，API 在此模式连接 PostgreSQL 与 Redis，连接失败阻止启动。skeleton 模式不建立这些连接，数据库业务主要返回 501；CSRF 等不依赖数据库的能力仍可工作。Worker 没有对应的无依赖分支，不能以 skeleton 演练采集。
 
-鉴权读取数据库中的当前角色、邮箱状态和 token_version。冻结和密码变更必须使此前 AT/RT 失效；角色变化也应立即反映权限。刷新不无限延长原 RT 截止时间。登出只清除当前浏览器凭据，不增加设备会话管理能力。
+`initialize.BuildServices` 显式注入数据库、冻结缓存、JWT、密码、CSRF、SMTP。API 关闭时释放连接，HTTP 优雅退出窗口 10 秒。Worker 在自己的 main 中装配依赖，没有完整复用 API 生命周期管理。
 
-### router/user.go
-
-| 方法与路径 | 输入 | 返回 |
-| --- | --- | --- |
-| GET `/me/info` | AT | AccountUser |
-| PUT `/me/update` | `{nickname}` | AccountUser |
-| PUT `/me/password` | `{current_password,new_password}` | null |
-| POST `/me/mail/code` | `{mail,current_password?}` | `{verification_id,expires_in,retry_after}` |
-| POST `/me/mail/verify` | `{verification_id,code}` | AccountUser |
-| GET `/admin/user/list` | 分页、q、role、frozen | List<AdminUser> |
-| GET `/admin/user/info` | `?id=` | AdminUser |
-| PUT `/admin/user/update` | `{id,nickname}` | AdminUser |
-| PUT `/admin/user/role` | `{id,role}` | AdminUser |
-| POST `/admin/user/resetPassword` | `{user_id,new_password}` | null |
-
-个人操作的用户 ID 来自认证结果，不能信任请求中的操作者身份。普通资料编辑不得修改角色、密码哈希、验证状态或 token_version。
-
-管理员角色仅允许 `user/admin`；提升管理员之前要求目标已验证邮箱。管理员自己未验证邮箱时仍可访问个人中心，但不能进入管理员业务接口。保护最后一个可用管理员，避免降权或冻结造成管理入口失效，并考虑并发操作。
-
-管理员重置密码不得顺便解除冻结。管理列表不返回密码哈希或不必要的邮箱等信息。
-
-### router/froze.go
-
-| 方法与路径 | 输入 | 返回 |
-| --- | --- | --- |
-| POST `/admin/froze/freeze` | `{user_id}` | `{user_id,frozen,cache_synced}` |
-| POST `/admin/froze/unfreeze` | `{user_id}` | `{user_id,frozen,cache_synced}` |
-
-沿用现有 SQL `fronze` 和 Redis 冻结缓存设计。SQL 表示冻结事实，Redis 作为缓存；默认 TTL 300 秒，不是自动解冻时间。未命中或缓存不可用时应按既有安全约定查询 SQL。
-
-冻结与 token_version 更新在事务内完成，重复提交应可安全处理。解冻不恢复旧令牌。缓存同步失败不能伪称同步成功，返回 `cache_synced=false`，允许重试相同操作。
-
-### router/merchant.go
-
-| 方法与路径 | 输入 | 返回 |
-| --- | --- | --- |
-| GET `/merchant/list` | 分页、q | List<Merchant> |
-| GET `/merchant/info` | `?id=` | Merchant |
-| GET `/admin/merchant/list` | 分页、q、enabled | List<AdminMerchant> |
-| GET `/admin/merchant/info` | `?id=` | AdminMerchant |
-| POST `/admin/merchant/create` | `{code,name,website_url,enabled,collection_enabled}` | AdminMerchant |
-| PUT `/admin/merchant/update` | `{id,name,website_url,enabled,collection_enabled}` | AdminMerchant |
-| DELETE `/admin/merchant/delete` | `?id=` | null |
-
-支持管理员从空数据库开始录入真实商家。code 唯一且创建后不可编辑；校验名称与 HTTP/HTTPS 网站地址。公开接口只能查看已启用且未删除的商家。
-
-删除仍有关联 VPS 的商家应返回明确冲突，提示先处理套餐；不静默级联删除数据。软删除后的唯一值复用规则应与数据库约束一致，并写入接口说明。
-
-### router/vps.go
-
-| 方法与路径 | 输入 | 返回 |
-| --- | --- | --- |
-| GET `/vps/list` | 分页和筛选 | List<VPS> |
-| GET `/vps/info` | `?id=` | VPS |
-| GET `/admin/vps/list` | 分页和筛选、enabled | List<AdminVPS> |
-| GET `/admin/vps/info` | `?id=` | AdminVPS |
-| POST `/admin/vps/create` | VPSEditable | AdminVPS |
-| PUT `/admin/vps/update` | VPSEditable + id | AdminVPS |
-| DELETE `/admin/vps/delete` | `?id=` | null |
-
-VPS 筛选包括 q、merchant_id、currency、billing_period、status、sort；sort 使用 `updated_desc/price_asc/price_desc` 白名单，禁止直接拼接用户排序内容。
-
-可编辑字段：
+## 2. 分层及源码导航
 
 ```text
-merchant_id, code, name, description,
-cpu_cores, memory_mb, disk_gb, disk_type,
-transfer_gb, port_mbps,
-has_ipv4, ipv4_count, has_ipv6, ipv6_count,
-price_amount, currency, billing_period, purchase_url,
-enabled, collection_enabled
+router/          路由分组、中间件绑定
+api/             JSON/query 绑定、当前用户、Cookie、统一响应
+middle/          request_id、日志、恢复、CORS、限流、认证、管理员、CSRF
+service/         业务校验、事务、SQL 查询、输出组装
+model/request/   HTTP 输入
+model/response/  HTTP 输出和包络
+model/entity/    GORM 实体和表映射
+model/dto/       内部 CollectionTask
+model/errcode/   业务错误映射
+iface/           auth、froze、mail、collect、message、enqueue 能力契约
+utils/           JWT、bcrypt、SMTP、Redis、采集器等具体实现
+task/            调度和消息处理
+initialize/      API 依赖与连接装配
+flag/            CLI 业务
+migrations/      SQL 迁移
 ```
 
-商家必须存在；套餐 code 在商家内唯一。CPU/内存为正整数，其他数量不能为负数；IP 开关与数量一致。价格使用精确十进制，币种使用三位大写代码。计费周期沿用 `monthly/quarterly/yearly/one_time`。transfer_gb/port_mbps 保留 null 未知、0 不限量的语义。
+当前没有 repository 层，service 直接通过 GORM 读写数据库。目录业务由 `catalog_helpers.go` 统一校验、错误映射和响应转换；账户辅助方法主要在 `user.go`、`mail_helpers.go`。扩展时沿用这套结构。
 
-公开 VPS 及库存查询必须同时考虑商家和套餐是否启用、是否删除；不能通过详情 ID 或筛选参数绕过。管理员可查看停用项。创建/编辑 VPS 仅维护套餐信息，**不得写入或更新库存**。
+## 3. HTTP 请求生命周期
 
-### router/stock.go
+全局顺序：RequestID → Logging → Recovery → CORS → 可选 RateLimit。路径再叠加认证、管理员或 CSRF 校验。
 
-GET `/stock/info?vps_id=` 返回：
+- `/api/v1/auth` 写请求要求 CSRF Cookie 与 `X-CSRF-Token`。
+- `/api/v1/me` 要求有效 Bearer AT。
+- `/api/v1/admin` 要求 AT、数据库当前角色为 admin、邮箱已验证。
+- 商家、套餐、库存、公开设置查询不要求登录。
+- 绑定失败统一返回 100001；当前未开启 JSON 未知字段拒绝，也未输出细粒度字段错误数组。
+- 普通成功 HTTP 200；找回验证码申请 HTTP 202；删除返回 `data:null`，不是 204。
+- `errcode.Resolve` 保留已知业务错误，未知错误映射 503/900004。
 
-```text
-{vps_id,status,quantity,last_checked_at,last_in_stock_at,is_stale}
-```
+健康端点不使用业务包络：live 返回 `{"status":"live"}`；ready 要求能读取迁移表、历史恰为一个版本 1、Redis Ping 成功，否则 503。ready 不校验完整表结构，也不检查 Worker、SMTP 或解析服务。
 
-status：1 有货、2 无货、3 未知。quantity 和时间可为 null。无库存行时返回未知、null 数量和时间、is_stale=true；这是未获得库存信息的真实状态，不是 mock。资源不存在或公开不可见时返回 404。
+### 中间件边界
 
-新鲜度按照固定阈值判断并在接口文档注明，可沿用 15 分钟。过期不等于无货，不应覆盖原有状态。库存采集及写入方法保留明确 TODO/未实现结果。
+CORS 允许配置来源或直接同源，支持 credentials，OPTIONS 提前 204。反向代理后应配置公网 HTTPS Origin：当前同源比较依据请求 TLS/Host，不直接依赖转发协议头。请求体上限 1 MiB，HTTP ReadHeaderTimeout 为 5 秒。
 
-### router/settings.go
+限流为单进程、来源 IP、固定一分钟窗口：`/auth/` 与 `/me/mail/` 共用 30 次额度，其他 API 共用 300 次额度；超限 `Retry-After:60`。多实例没有共享计数。
 
-| 方法与路径 | 输入 | 返回 |
+业务响应带 request_id，头部暴露 X-Request-ID。API 使用 slog，Worker 多处仍使用标准 log，没有贯穿调度、消息和请求的统一追踪。
+
+## 4. 认证与账户
+
+### 4.1 注册、登录、刷新
+
+用户名去空白转小写，匹配 `^[a-z0-9][a-z0-9_]{2,63}$`；昵称 1–64 个有效 UTF-8 字符。密码为 **8–72 个 UTF-8 字节**，bcrypt cost 12，不应误写为字符数。公开注册仅创建 user，初始注册关闭。
+
+登录返回 AccountUser 和 AT，RT 写入 `vps_refresh` HttpOnly Cookie。JWT 分开配置 AT/RT secret 与 audience，默认 AT 15 分钟、RT 168 小时；工具实现见 `utils/jwt/jwt.go`。
+
+认证每次检查令牌、冻结、用户存在性、token_version，从 SQL 读取当前角色和邮箱状态。Refresh 验证 RT 后重新签发，但保留原 RT 截止时间。没有设备会话表或 RT 单次使用/重放追踪表。
+
+登出只清当前浏览器 RT Cookie，不撤销已复制令牌，不是全设备退出。
+
+### 4.2 CSRF 和 Cookie
+
+GET `/auth/csrf` 复用仍有效的签名值，否则创建新值；JSON 返回 `data.token` 并写 Cookie。CSRF Cookie 也为 HttpOnly，前端从 JSON 取值。
+
+两类 Cookie 均为 Path=/、无 Domain、SameSite=Lax；Secure 由 `CSRF_COOKIE_SECURE` 同时控制。生产强制 Secure；安全 CSRF Cookie 默认名 `__Host-vps_csrf`，开发默认 `vps_csrf`。真正跨站部署不能只通过 CORS 白名单解决 Cookie 限制，现成方案适合同源反向代理。
+
+### 4.3 改密、角色与管理员保护
+
+- 本人改密校验当前密码；管理员重置不需要目标旧密码。
+- 改密更新哈希、递增 token_version、消费旧安全验证码；不解除冻结。
+- 角色仅 user/admin，提升前必须验证邮箱；角色实际变化递增 token_version。
+- 降权和冻结先锁定站点设置行串行化管理员变更，再锁用户行并保护最后一个可用管理员；冲突为 409。
+- `/me` 使用认证上下文用户 ID，不接受客户端选择操作者。
+- AdminUser 仅额外公开 frozen，不返回密码哈希或邮箱。
+
+### 4.4 冻结
+
+实际 SQL 表名是 **fronze**。活动记录表示冻结，解冻软删除记录，重新冻结恢复或新建。
+
+首次冻结改变状态时递增 token_version，重复冻结不重复递增。Redis key 为 `auth:frozen:{user_id}`，默认 TTL 300 秒，是缓存寿命，不是自动解冻时间。缓存命中直接拒绝；未命中或 Redis 异常回查 SQL。
+
+事务成功后同步缓存，失败返回 cache_synced=false，不回滚数据库。解冻删缓存失败可能暂时仍被缓存阻止登录，可重试同步。解冻不恢复旧令牌。
+
+## 5. 邮箱与找回密码
+
+`service/mail.go`、`password_reset.go` 管理挑战，`utils/mail` 管理地址规范化和 SMTP。邮件在 API 请求内同步发送，当前在相关数据库事务内调用，不走 Stream。
+
+| 项目 | 规则 |
+| --- | --- |
+| 验证码 | 安全随机 6 位数字，bcrypt 哈希保存 |
+| 有效期/冷却 | 10 分钟 / 60 秒 |
+| 最大错误尝试 | 5 次 |
+| 对外标识 | UUID verification_id/reset_id，不是验证码或自增 ID |
+| 消费 | 一次性；改密等安全操作使旧挑战失效 |
+
+首次绑定发送目标邮箱验证码；换绑已有邮箱需当前密码，完成验证前保留旧邮箱。绑定投递失败返回 503/200014。
+
+找回申请对未知、未验证邮箱和冷却中的请求返回中性 202。统一邮件配置不可用返回 503；特定地址投递失败回滚事务、记录 reset_id，仍返回中性受理结果。202 不表示已投递。重置成功更新密码、撤销旧令牌，不解冻。
+
+SMTP 支持 starttls/tls/none，默认超时 10 秒。同步发送仍存在邮件已发但事务后来提交失败的窗口，不具备邮件和 SQL 的原子一致性。
+
+## 6. 目录、设置和库存
+
+### 商家
+
+code 去空白转小写，匹配 `^[a-z0-9][a-z0-9._-]{0,63}$`，全表唯一，更新不接受 code。名称最多 128 字符。URL 为 HTTP/HTTPS、主机非空、无用户信息、最多 4096 字节。
+
+公开仅启用且未删除，后台可查停用项。删除前检查未删除关联 VPS，有关联返回 409，不级联删除。软删除不释放唯一 code。
+
+### VPS
+
+`(merchant_id,code)` 全表唯一，软删除不释放组合。更新允许改变商家与 code，是完整可编辑对象更新；map 更新保存 false、0、null。
+
+| 字段 | 规则 |
+| --- | --- |
+| name / description | 1–128 字符 / 最多 10000 字符 |
+| cpu_cores / memory_mb | 正 int32 |
+| disk_gb / ipv4_count / ipv6_count | 非负 int32 |
+| disk_type | 小写非空字符串，最多 32 字符；后端没有固定枚举 |
+| transfer_gb / port_mbps | null 未知、0 不限量；非空为非负 int32 |
+| has_ipv4 / has_ipv6 | 分别等于对应数量是否大于 0 |
+| price_amount | 十进制字符串，整数 1–12 位、小数最多 8 位，不接受科学计数法 |
+| currency | 归一化为三位大写字母 |
+| billing_period | monthly / quarterly / yearly / one_time |
+| purchase_url | HTTP/HTTPS；也作为当前采集源 URL |
+
+价格使用 decimal 与 SQL numeric(20,8)，响应可能去除末尾零。价格排序按存储金额，不折算汇率或付款周期。
+
+公开列表、详情、库存同时要求商家与 VPS 未删除且启用。列表筛选 q、merchant_id、currency、billing_period、status、sort；后台多 enabled。排序白名单，库存筛选不按 stale 改写 status。
+
+目录创建/编辑不写库存。VPS 删除软删除套餐，不物理删除库存行。返回列表时批量读取商家/库存，组装公共或管理视图。
+
+### 设置
+
+site_settings 活动记录唯一，保存站点名、注册和全局采集开关。默认注册/采集关闭；无行时查询返回安全关闭默认值，不创建数据。
+
+部分更新用指针区分省略与 false；无有效字段返回参数错误。管理响应为嵌套 settings 加顶层 collection_enabled、collector_implemented、updated_at。当前 **collector_implemented 固定 true**，不检测部署能力或进程健康。
+
+### 库存和统计
+
+vps_stocks 每 VPS 一行快照，没有历史表。对外仅 vps_id、status、quantity、last_checked_at、last_in_stock_at、is_stale。
+
+无库存行返回 status=3、数量/时间 null、stale=true，不插入假记录。检查时间为空或超过 15 分钟为 stale，保留状态。last_in_stock_at 是最后一次确认有货时间，后续无货不清空。写入与 Stream ID 防旧覆盖见采集文档。
+
+看板一次 SQL 统计未删除用户、冻结用户、商家、套餐、有货和未知套餐，包含停用项；套餐要求商家未删除。无库存行计未知；stale 不影响按 status 统计。
+
+## 7. 数据模型和迁移
+
+实体共用自增 ID、创建/更新时间、软删除时间；对外 ID 为十进制字符串，内部 Go uint/SQL bigint。
+
+| 表 | 核心字段/关系 | 约束与用途 |
 | --- | --- | --- |
-| GET `/settings/info` | 无 | PublicSettings |
-| GET `/admin/settings/info` | 无 | AdminSettings |
-| PUT `/admin/settings/update` | `{site_name?,registration_enabled?,collection_enabled?}` | AdminSettings |
+| users | username、nickname、password_hash、role、mail、验证时间、token_version | username/mail 唯一，版本 > 0 |
+| fronze | user_id → users | user_id 唯一，活动行表示冻结 |
+| merchant | code、name、website_url、两类开关 | code 唯一 |
+| vps_detail | merchant_id → merchant、规格、价格、购买链接、两类开关 | 商家内 code 唯一，规格/币种/周期约束 |
+| vps_stocks | vps_id → vps_detail、状态、数量、检查/有货时间、delivery_id | vps_id 唯一；delivery_id 数字-数字格式 |
+| site_settings | 站点名、注册、采集开关 | 活动行单例 |
+| user_mail_verifications | user_id、public_id、目标邮箱、code_hash、过期/消费/错误次数 | public_id 唯一 |
+| password_reset_requests | user_id、public_id、code_hash、过期/消费/错误次数 | public_id 唯一 |
+| schema_migrations | 版本、名称、校验和、应用时间 | 迁移服务维护 |
 
-PublicSettings 为 `{site_name,registration_enabled}`。AdminSettings 建议保持现有 settings 嵌套结构，并在顶层增加采集配置和能力标记：
+业务外键为 RESTRICT；主要索引覆盖软删除、商家目录、库存状态、验证码用户/过期查询。完整约束见 [001_initial.up.sql](../backend/migrations/001_initial.up.sql)。
 
-```text
-{settings:PublicSettings,collection_enabled,collector_implemented,updated_at}
-```
+当前只有 001_initial，面向空库。迁移器在事务内使用 PostgreSQL advisory lock，检查连续版本、SHA-256 校验和。up 应用待执行迁移，down 回滚最近版本；语句按 `-- migrate:split` 分隔。
 
-设置部分更新应能正确保存 false，不遗漏零值。初始采集关闭；注册默认关闭，由管理员开启。`collector_implemented=false` 表示实际采集器尚未接入，不能由客户端随意写入。
+旧库缺少 delivery_id 等字段时，需要升级迁移和历史回填，不能重写或重跑已应用 001。新增版本还需调整当前写死版本 1 的 readiness 检查。
 
-### router/dashboard.go
+## 8. 开发与验证
 
-GET `/admin/dashboard/info` 返回真实数据库统计：
+新增 HTTP 能力依次维护 request/response、service、api、router、OpenAPI、前端类型与调用。API 不越过 service 操作密码工具、Redis 或数据库。采集扩展见 [collection.md](collection.md)。
 
-```text
-{user_count,frozen_user_count,merchant_count,vps_count,in_stock_count,unknown_stock_count}
-```
-
-无数据时计数为 0。明确是否包含停用项，并与管理列表口径一致；建议包含未删除的停用商家和套餐。没有库存行的套餐计入未知库存。不增加虚构采集任务数、在线设备数或走势图。
-
-### router/router.go、enter.go
-
-完成路由装配、认证/管理员/CSRF 中间件、错误响应、CORS、可信代理和限流的实际接入。`/health/live` 表示进程存活，`/health/ready` 检查运行所需依赖和迁移状态，不能固定返回假就绪。
-
-## 五、采集控制的明确边界
-
-在站点、商家、VPS 三层保存独立 `collection_enabled`，默认 false。`enabled` 只表示公开展示，不复用为采集开关。
-
-未来执行许可为：全局允许采集，且商家和 VPS 均存在、未删除、已启用、各自允许采集。可提供只读的 `CollectionAllowed` 查询方法，供维护者后续接入；该方法不得发起抓取或写库存。
-
-开关关闭不清空历史库存，不删除套餐，不伪造无货；重新开启也不会立即产生库存。UI 必须依据能力标记说明“配置已保存，采集功能待接入”。保留现有 StockObservation/ApplyObservation/StockConsumer 等入口即可，不擅自实现库存消费、确认或重试流程。
-
-## 六、邮箱与初始化闭环
-
-邮件必须通过真实 SMTP 发送，验证码不得回传到 API、日志或前端。需要配置邮件服务的启用状态、连接地址、认证、TLS 和超时。
-
-验证码使用安全随机数，保存哈希，具备有效期、发送冷却、错误次数上限和一次性消费。建议沿用 6 位数字、10 分钟有效、60 秒冷却、最多 5 次错误尝试。首次绑定和换绑区分处理，换绑验证当前密码，成功前保留旧邮箱。
-
-找回密码不得通过响应泄露邮箱是否存在。未知邮箱、未验证邮箱、冷却中的请求返回中性提示；统一配置不可用可返回邮件不可用。投递失败的行为必须明确记录，不能把“申请已受理”表述成“已成功收到邮件”。改密、换绑和找回流程应避免旧验证码在并发操作后仍可使用。
-
-提供真实首个管理员初始化流程：命令创建普通候选账号 → 登录个人中心完成真实邮箱验证 → 命令提升管理员 → 重新登录后台。密码通过环境变量等适当方式输入，不创建默认密码或演示账号。公开注册关闭时也必须能够完成此初始化。
-
-## 七、交付与验收要求
-
-- router 下每个业务路径都有对应实现与关联依赖，只有明确约定的采集/库存写入保留。
-- 新数据库完成迁移和首个管理员初始化后，可以直接通过后台录入商家和套餐。
-- 公开页面能够读取这些真实记录；隐藏、删除、筛选、分页和权限限制行为一致。
-- 用户资料、邮箱、密码、权限和冻结流程形成闭环；过期、撤销、验证码复用、非法参数和数据库冲突有明确错误。
-- false、0、null 能按字段语义正确保存；不能因 GORM 忽略零值导致开关关不掉。
-- 三级采集开关可保存并查询，但不启动采集、不更新库存、不消费或确认库存消息。
-- 保持前端运行时不使用 mock，不通过 seed 填演示数据。
-- 后端实施者完成适当的构建与业务验证，并如实报告已验证内容、跳过项和依赖限制；不要把本需求文档当作已完成证明。
-- 实施完成后同步 OpenAPI、配置示例、启动说明和前端接口契约。文档与返回字段、错误码、校验规则必须一致。
+本次 `go build ./...` 通过；测试包因旧 fake Ack 签名不匹配无法编译。Redis 工具测试还包含本地实例无限读取，因此 `go test ./...` 不是当前无外部依赖的安全默认检查。详见 [验证记录](known-issues.md)。

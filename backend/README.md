@@ -1,12 +1,12 @@
 # VPS Monitor 后端
 
-后端使用 Go、Gin、GORM、PostgreSQL 与 Redis，提供真实的认证、账号安全、用户管理、商家/VPS 目录、库存只读展示、站点设置和管理看板接口。接口契约见 [`../docs/openapi.yaml`](../docs/openapi.yaml)。
+后端使用 Go、Gin、GORM、PostgreSQL 与 Redis，提供认证、账号安全、用户管理、商家/VPS 目录、库存查询、站点设置和看板接口。独立 Worker 负责采集写入。完整技术文档见 [`../docs/backend.md`](../docs/backend.md)，接口契约见 [`../docs/openapi.yaml`](../docs/openapi.yaml)。
 
-采集器、库存写入、调度以及 Redis Stream 消费/确认尚未实现。`WORKER_ENABLED` 必须保持 `false`；三级 `collection_enabled` 只保存未来采集许可，不会触发采集或生成库存。
+采集链路已经接入，默认 `WORKER_ENABLED=false`。本地使用 `WORKER_ENABLED=true` 启动 `cmd/worker`；Docker 入口还需 `START_WORKER=true`。三级采集许可、商家/VPS 启用条件及解析服务都需满足，详细运行方式见 [`../docs/deployment.md`](../docs/deployment.md)。
 
 依赖保持单向：`api/middle → service`，service 依赖 `iface` 中的能力契约，`utils` 提供底层实现，最后由 `initialize` 统一装配。认证和冻结的可替换能力统一定义在 `iface`，API 不读取 service 的内部 provider；JWT、CSRF、密码、SMTP 和 Redis 缓存实现位于 `utils`。`service/mail.go` 与 `service/password_reset.go` 负责验证码业务和数据库事务，`utils/mail` 封装地址规范化、MIME 组装及 SMTP 交互。邮件由 API 同步投递，不经过 `task` 或消息队列。
 
-库存采集是明确的未来扩展点：只保留 `StockObservation`、`StockConsumer`、消息接口和 Redis Stream 外壳。当前不装配读取器，不读取、写入或确认库存消息。
+内部任务为 `CollectionTask`，Worker 通过 Redis Stream 消费后调用采集器并更新库存。当前两个采集器只明确识别无货；Pending 清理直接 ACK，不执行重试。不要以进程存活判断采集正常，完整语义见 [`../docs/collection.md`](../docs/collection.md)。
 
 ## 本地启动
 
@@ -64,15 +64,15 @@ go run ./cmd/migrate down --dir migrations
 
 ## 验证
 
-不需要外部服务的检查：
+当前可用的业务构建检查：
 
 ```bash
-go test ./...
-go vet ./...
 go build ./...
 ```
 
-完整路由集成测试需要专用 PostgreSQL 与 Redis：
+当前测试包中的 fakeMessages.Ack 签名未同步，`go test ./test -run '^$'` 编译失败；Redis 工具测试还包含固定本地连接和无限读取。不要直接把 `go test ./...` 当作无外部依赖检查。详情见 [`../docs/known-issues.md`](../docs/known-issues.md)。
+
+修复测试编译后，完整路由集成测试需要专用 PostgreSQL 与 Redis：
 
 ```bash
 docker compose -f compose.test.yml up -d

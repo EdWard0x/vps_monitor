@@ -9,11 +9,12 @@ import (
 	mailutil "vpsmonitor/utils/mail"
 	passwordutil "vpsmonitor/utils/password"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 // BuildServices 统一装配依赖。骨架模式传入 nil DB，绝不在包级 init 建立连接。
-func BuildServices(cfg config.Config, db *gorm.DB, cache frozeiface.Cache) service.Group {
+func BuildServices(cfg config.Config, db *gorm.DB, cache frozeiface.Cache, redisCli *redis.Client) service.Group {
 	frozen := service.NewFrozeService(db, cache, cfg.Redis.FrozenCacheTTL)
 	password := passwordutil.Provider{}
 	tokens := jwtutil.New(
@@ -24,13 +25,15 @@ func BuildServices(cfg config.Config, db *gorm.DB, cache frozeiface.Cache) servi
 	csrf := csrfutil.New(cfg.HTTP.CSRFSecret, cfg.HTTP.CSRFTokenTTL)
 	sender := mailutil.New(cfg.Mail)
 	return service.Group{
-		Auth: service.NewAuthService(db, tokens, password, csrf, frozen),
-		User: service.NewUserService(db, password), Mail: service.NewMailService(db, sender, password),
+		Auth:          service.NewAuthService(db, tokens, password, csrf, frozen),
+		User:          service.NewUserService(db, password),
+		Mail:          service.NewMailService(db, sender, password),
 		PasswordReset: service.NewPasswordResetService(db, sender, password),
 		Froze:         frozen, Merchant: service.NewMerchantService(db),
 		VPS:       service.NewVPSService(db),
 		Stock:     service.NewStockService(db),
 		Settings:  service.NewSettingsService(db),
 		Dashboard: service.NewDashboardService(db),
+		Favor:     service.NewFavorService(db, redisCli),
 	}
 }

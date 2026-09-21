@@ -1,8 +1,9 @@
 package entity
 
 import (
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type User struct {
@@ -14,5 +15,6 @@ type User struct {
 	Mail           *string `gorm:"uniqueIndex;size:320"`
 	MailVerified   bool    `gorm:"not null;default:false"`
 	MailVerifiedAt *time.Time
-	TokenVersion   uint64 `gorm:"not null;default:1"`
+
+	TokenVersion uint64 `gorm:"not null;default:1"`
 }

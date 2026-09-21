@@ -21,10 +21,13 @@ var (
 	ResourceNotFound = &Error{100005, http.StatusNotFound, "资源不存在"}
 	ResourceConflict = &Error{100006, http.StatusConflict, "资源冲突或仍被引用"}
 
-	DatabaseError = &Error{400001, http.StatusInternalServerError, "数据库操作失败"}
-
 	FlareResolveFailed = &Error{400001, http.StatusGatewayTimeout, "flare解析器处理失败"}
-	QueryHtmlFailed    = &Error{400001, http.StatusInternalServerError, "html解析失败"}
+	QueryHtmlFailed    = &Error{400002, http.StatusInternalServerError, "html解析失败"}
+
+	DatabaseError         = &Error{500001, http.StatusInternalServerError, "数据库操作失败"}
+	RedisSetRepeatError   = &Error{500002, http.StatusInternalServerError, "redis成员数据重复"}
+	RedisKeyNotExitsData  = &Error{500003, http.StatusInternalServerError, "redis未查询到该成员有数据"}
+	RedisSetOrKeyNotExits = &Error{500004, http.StatusInternalServerError, "redismember或key不存在"}
 
 	DependencyUnavailable = &Error{900004, http.StatusServiceUnavailable, "依赖服务不可用"}
 	NotImplemented        = &Error{900005, http.StatusNotImplemented, "功能尚未实现"}

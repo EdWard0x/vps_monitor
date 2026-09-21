@@ -1,8 +1,9 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"vpsmonitor/api"
+
+	"github.com/gin-gonic/gin"
 )
 
 func InitMeRouter(me *gin.RouterGroup, a api.Group) {
@@ -11,6 +12,10 @@ func InitMeRouter(me *gin.RouterGroup, a api.Group) {
 	me.PUT("/password", a.UserApi.ChangePassword)
 	me.POST("/mail/code", a.MailApi.SendCode)
 	me.POST("/mail/verify", a.MailApi.Confirm)
+
+	me.POST("/addFavor", a.FavorApi.AddFavors)
+	me.GET("/listFavors", a.FavorApi.ListFavors)
+	me.DELETE("/delFavor", a.FavorApi.DelFavors)
 }
 func InitUserRouter(admin *gin.RouterGroup, a api.Group) {
 	user := admin.Group("/user")

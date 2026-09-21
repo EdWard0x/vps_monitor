@@ -4,6 +4,7 @@ import * as userApi from '../api/user';
 import * as frozeApi from '../api/froze';
 import * as merchantApi from '../api/merchant';
 import * as vpsApi from '../api/vps';
+import * as favorApi from '../api/favor';
 import * as stockApi from '../api/stock';
 import * as settingsApi from '../api/settings';
 import * as dashboardApi from '../api/dashboard';
@@ -50,6 +51,11 @@ describe('Frontend Refactor Skeleton Contract Tests', () => {
     expect(typeof vpsApi.adminCreateVPS).toBe('function');
     expect(typeof vpsApi.adminUpdateVPS).toBe('function');
     expect(typeof vpsApi.adminDeleteVPS).toBe('function');
+
+    // Favor endpoints
+    expect(typeof favorApi.addFavor).toBe('function');
+    expect(typeof favorApi.delFavor).toBe('function');
+    expect(typeof favorApi.listFavors).toBe('function');
 
     // Stock endpoints
     expect(typeof stockApi.getStock).toBe('function');
@@ -101,6 +107,7 @@ describe('Frontend Refactor Skeleton Contract Tests', () => {
     expect(routePaths).toContain('/reset-password');
     expect(routePaths).toContain('/forgot-password');
     expect(routePaths).toContain('/account');
+    expect(routePaths).toContain('/account/favorites');
     expect(routePaths).toContain('/admin');
     expect(routePaths).toContain('/admin/merchants');
     expect(routePaths).toContain('/admin/vps');

@@ -1,10 +1,11 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
 	"vpsmonitor/model/request"
 	"vpsmonitor/model/response"
 	"vpsmonitor/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 type UserApi struct{ Service *service.UserService }

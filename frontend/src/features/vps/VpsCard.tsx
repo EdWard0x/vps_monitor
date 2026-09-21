@@ -7,6 +7,7 @@ import { formatMemory, formatDisk, formatPort, formatTransfer } from '@/lib/form
 import { formatDate, formatRelativeTime } from '@/lib/format/date';
 import { isSafeExternalUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { FavoriteButton } from './FavoriteButton';
 import { Cpu, HardDrive, Zap, Globe, ShoppingCart, ArrowRight, Clock } from 'lucide-react';
 
 export interface VpsCardProps {
@@ -21,10 +22,10 @@ export const VpsCard: React.FC<VpsCardProps> = ({ vps }) => {
       <div>
         {/* 头部：商家与库存状态 */}
         <div className="flex items-start justify-between gap-2 mb-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <Link
               to={`/merchants/${vps.merchant.id}`}
-              className="text-xs font-semibold text-brand-600 hover:underline uppercase tracking-wider"
+              className="text-xs font-semibold text-brand-600 hover:underline uppercase tracking-wider block truncate"
             >
               {vps.merchant.name}
             </Link>
@@ -34,7 +35,10 @@ export const VpsCard: React.FC<VpsCardProps> = ({ vps }) => {
               </Link>
             </h3>
           </div>
-          <StockBadge stock={vps.stock} />
+          <div className="flex items-center gap-1 shrink-0">
+            <StockBadge stock={vps.stock} />
+            <FavoriteButton vpsId={vps.id} />
+          </div>
         </div>
 
         {/* 规格列表 */}

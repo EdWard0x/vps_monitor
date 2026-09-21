@@ -17,6 +17,7 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { PasswordResetPage } from '@/pages/auth/PasswordResetPage';
 import { AccountPage } from '@/pages/account/AccountPage';
+import { FavoritesPage } from '@/pages/account/FavoritesPage';
 
 // 管理员后台页面（懒加载）
 const AdminDashboardPage = lazy(() =>
@@ -85,6 +86,14 @@ export const routes: RouteObject[] = [
         element: (
           <AuthGuard>
             <AccountPage />
+          </AuthGuard>
+        ),
+      },
+      {
+        path: 'account/favorites',
+        element: (
+          <AuthGuard>
+            <FavoritesPage />
           </AuthGuard>
         ),
       },

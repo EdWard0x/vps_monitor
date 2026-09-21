@@ -13,6 +13,7 @@ type Group struct {
 	StockApi         StockApi
 	SettingsApi      SettingsApi
 	DashboardApi     DashboardApi
+	FavorApi         FavorApi
 }
 
 func NewGroup(s service.Group, csrfCookie, refreshCookie CookieOptions) Group {
@@ -27,5 +28,6 @@ func NewGroup(s service.Group, csrfCookie, refreshCookie CookieOptions) Group {
 		StockApi:         StockApi{s.Stock},
 		SettingsApi:      SettingsApi{s.Settings},
 		DashboardApi:     DashboardApi{s.Dashboard},
+		FavorApi:         FavorApi{s.Favor},
 	}
 }

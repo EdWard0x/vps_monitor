@@ -8,6 +8,7 @@ import { formatMemory, formatDisk, formatPort, formatTransfer } from '@/lib/form
 import { formatDate, formatRelativeTime } from '@/lib/format/date';
 import { isSafeExternalUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
+import { FavoriteButton } from './FavoriteButton';
 import {
   Cpu,
   HardDrive,
@@ -48,8 +49,11 @@ export const VpsDetailCard: React.FC<VpsDetailCardProps> = ({ vps }) => {
           </h1>
         </div>
 
-        <div className="flex flex-col sm:items-end gap-1.5">
-          <StockBadge stock={vps.stock} />
+        <div className="flex flex-col sm:items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-2">
+            <StockBadge stock={vps.stock} />
+            <FavoriteButton vpsId={vps.id} />
+          </div>
           <div className="text-xs text-gray-500 flex items-center gap-1">
             <Clock className="w-3.5 h-3.5 text-gray-400" />
             <span className="text-gray-400">上次检查：</span>

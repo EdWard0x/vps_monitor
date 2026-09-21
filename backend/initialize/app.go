@@ -48,7 +48,7 @@ func New(cfg config.Config) (*App, error) {
 		}
 		frozenCache = redisfrozen.New(redisConnection.Client)
 	}
-	services := BuildServices(cfg, dbForServices, frozenCache)
+	services := BuildServices(cfg, dbForServices, frozenCache, redisConnection.Client)
 	apis := api.NewGroup(
 		services,
 		api.CookieOptions{

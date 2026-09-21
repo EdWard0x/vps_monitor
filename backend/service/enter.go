@@ -11,4 +11,5 @@ type Group struct {
 	Stock         *StockService
 	Settings      *SettingsService
 	Dashboard     *DashboardService
+	Favor         *FavorService
 }

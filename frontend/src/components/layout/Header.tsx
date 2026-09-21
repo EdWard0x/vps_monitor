@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { useSettings } from '@/app/SettingsContext';
 import { Button } from '@/components/ui/Button';
-import { Server, Menu, X, Shield, User, LogOut } from 'lucide-react';
+import { Server, Menu, X, Shield, User, LogOut, Star } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -55,6 +55,12 @@ export const Header: React.FC = () => {
                   </Button>
                 </Link>
               )}
+              <Link to="/account/favorites">
+                <Button variant="ghost" size="sm" className="text-gray-700 hover:text-amber-600">
+                  <Star className="w-4 h-4 mr-1.5 text-amber-500 fill-current" />
+                  收藏
+                </Button>
+              </Link>
               <Link to="/account">
                 <Button variant="ghost" size="sm">
                   <User className="w-4 h-4 mr-1.5 text-gray-500" />
@@ -139,6 +145,14 @@ export const Header: React.FC = () => {
                     进入管理后台
                   </Link>
                 )}
+                <Link
+                  to="/account/favorites"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center w-full px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100 font-medium"
+                >
+                  <Star className="w-4 h-4 mr-2 text-amber-500 fill-current" />
+                  我的收藏
+                </Link>
                 <Link
                   to="/account"
                   onClick={() => setMobileMenuOpen(false)}

@@ -72,20 +72,21 @@ func main() {
 		log.Printf("Error creating stream %s: %v", cfg.Redis.Stream, err)
 		return
 	}
-
+	//监控vps collect开启状态，推送消息
 	go func() {
 		err := scheduler.Run(ctx)
 		if err != nil {
 			log.Printf("scheduler stopped: %v", err)
 		}
 	}()
-
+	//消费vps collect
 	go func() {
 		err := consumer.Run(ctx)
 		if err != nil {
 			log.Printf("consumer stopped: %v", err)
 		}
 	}()
+	//处理vps collect pending消息
 	go func() {
 		if err := consumer.RecoverPending(ctx); err != nil {
 			log.Printf("pending recovery stopped: %v", err)

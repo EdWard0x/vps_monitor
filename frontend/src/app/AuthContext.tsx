@@ -14,7 +14,7 @@ import * as userApi from '@/api/user';
 
 export type AuthStatus = 'loading' | 'anonymous' | 'authenticated' | 'unavailable';
 
-interface AuthContextType {
+export interface AuthContextType {
   status: AuthStatus;
   user: AccountUser | null;
   loading: boolean;
@@ -28,7 +28,7 @@ interface AuthContextType {
   clearFrozenAlert: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -181,4 +181,8 @@ export function useAuth() {
     throw new Error('useAuth must be used within AuthProvider');
   }
   return ctx;
+}
+
+export function useAuthOptional() {
+  return useContext(AuthContext);
 }

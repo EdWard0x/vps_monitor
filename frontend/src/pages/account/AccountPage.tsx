@@ -1,11 +1,11 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { ProfileSection } from '@/features/account/ProfileSection';
 import { MailBindingSection } from '@/features/account/MailBindingSection';
 import { PasswordChangeSection } from '@/features/account/PasswordChangeSection';
 import { Button } from '@/components/ui/Button';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Star, ArrowRight } from 'lucide-react';
 
 export const AccountPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -45,6 +45,28 @@ export const AccountPage: React.FC = () => {
 
       {/* 资料与账号设置板块 */}
       <div className="space-y-6">
+        {/* 我的收藏快捷入口 */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center shrink-0">
+              <Star className="w-5 h-5 fill-current" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900">我的收藏</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                查看并管理您收藏的 VPS 套餐，实时跟踪库存状态与价格走势
+              </p>
+            </div>
+          </div>
+          <Link to="/account/favorites">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto text-amber-700 border-amber-200 hover:bg-amber-50">
+              <Star className="w-4 h-4 mr-1.5 fill-current text-amber-500" />
+              进入我的收藏
+              <ArrowRight className="w-4 h-4 ml-1 text-gray-400" />
+            </Button>
+          </Link>
+        </div>
+
         <ProfileSection />
         <MailBindingSection />
         <PasswordChangeSection />

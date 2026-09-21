@@ -1,9 +1,10 @@
 package router
 
 import (
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"vpsmonitor/api"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Middleware struct {

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"gorm.io/gorm"
 	"vpsmonitor/config"
 	"vpsmonitor/initialize"
 	"vpsmonitor/model/entity"
@@ -16,6 +15,8 @@ import (
 	"vpsmonitor/model/request"
 	"vpsmonitor/service"
 	passwordutil "vpsmonitor/utils/password"
+
+	"gorm.io/gorm"
 )
 
 type AdminCommand struct {

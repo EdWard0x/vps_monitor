@@ -5,6 +5,7 @@ export * from './passwordReset';
 export * from './froze';
 export * from './merchant';
 export * from './vps';
+export * from './favor';
 export * from './stock';
 export * from './settings';
 export * from './dashboard';

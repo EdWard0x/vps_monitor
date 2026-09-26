@@ -30,10 +30,11 @@ func BuildServices(cfg config.Config, db *gorm.DB, cache frozeiface.Cache, redis
 		Mail:          service.NewMailService(db, sender, password),
 		PasswordReset: service.NewPasswordResetService(db, sender, password),
 		Froze:         frozen, Merchant: service.NewMerchantService(db),
-		VPS:       service.NewVPSService(db),
+		VPS:       service.NewVPSService(db, redisCli),
 		Stock:     service.NewStockService(db),
 		Settings:  service.NewSettingsService(db),
 		Dashboard: service.NewDashboardService(db),
 		Favor:     service.NewFavorService(db, redisCli),
+		Notice:    service.NewNoticeService(db, redisCli),
 	}
 }

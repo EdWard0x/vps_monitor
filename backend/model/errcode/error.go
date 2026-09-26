@@ -23,11 +23,15 @@ var (
 
 	FlareResolveFailed = &Error{400001, http.StatusGatewayTimeout, "flare解析器处理失败"}
 	QueryHtmlFailed    = &Error{400002, http.StatusInternalServerError, "html解析失败"}
+	ServerTurboFailed  = &Error{400003, http.StatusInternalServerError, "Server酱内部失败"}
 
 	DatabaseError         = &Error{500001, http.StatusInternalServerError, "数据库操作失败"}
 	RedisSetRepeatError   = &Error{500002, http.StatusInternalServerError, "redis成员数据重复"}
 	RedisKeyNotExitsData  = &Error{500003, http.StatusInternalServerError, "redis未查询到该成员有数据"}
 	RedisSetOrKeyNotExits = &Error{500004, http.StatusInternalServerError, "redismember或key不存在"}
+	ServerTurboNoRecord   = &Error{500005, http.StatusInternalServerError, "未查询到ServerTurbo_key值"}
+	SendTimesGT3          = &Error{500006, http.StatusInternalServerError, "发送次数超过3次"}
+	IntervalLT2           = &Error{500007, http.StatusInternalServerError, "时间间隔小于12小时"}
 
 	DependencyUnavailable = &Error{900004, http.StatusServiceUnavailable, "依赖服务不可用"}
 	NotImplemented        = &Error{900005, http.StatusNotImplemented, "功能尚未实现"}

@@ -26,6 +26,7 @@ type VPS struct {
 	BillingPeriod     string
 	PurchaseURL       string
 	Enabled           bool `gorm:"not null;default:true"`
+	HasStock          bool `gorm:"not null;default:false"`
 	CollectionEnabled bool `gorm:"not null;default:false"`
 }
 

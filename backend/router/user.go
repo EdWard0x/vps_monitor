@@ -13,9 +13,14 @@ func InitMeRouter(me *gin.RouterGroup, a api.Group) {
 	me.POST("/mail/code", a.MailApi.SendCode)
 	me.POST("/mail/verify", a.MailApi.Confirm)
 
+	//收藏
 	me.POST("/addFavor", a.FavorApi.AddFavors)
 	me.GET("/listFavors", a.FavorApi.ListFavors)
 	me.DELETE("/delFavor", a.FavorApi.DelFavors)
+
+	//通知
+	me.POST("/addNotice", a.NoticeApi.AddNotices)
+	me.DELETE("/delNotice", a.NoticeApi.DelNotices)
 }
 func InitUserRouter(admin *gin.RouterGroup, a api.Group) {
 	user := admin.Group("/user")

@@ -59,6 +59,7 @@ func (c Client) Del(ctx context.Context, msg messageiface.ReadOptions, id string
 	}
 	return nil
 }
+
 func (c Client) Enqueue(ctx context.Context, stream string, payload []byte) (string, error) {
 	id, err := c.Redis.XAdd(ctx, &redis.XAddArgs{
 		Stream: stream,
@@ -101,4 +102,19 @@ func (c Client) AutoClaim(ctx context.Context, op messageiface.ClaimOptions) ([]
 		})
 	}
 	return deliveries, nextStart, nil
+}
+func (c Client) GetPending(ctx context.Context, op messageiface.PendingOptions) ([]redis.XPendingExt, error) {
+	result, err := c.Redis.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream:   op.Stream,
+		Group:    op.Group,
+		Idle:     op.Idle,
+		Start:    op.Start,
+		End:      op.End,
+		Count:    op.Count,
+		Consumer: op.Consumer,
+	}).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

@@ -16,6 +16,7 @@
 | [前端采集联调速查](frontend-collection-sync.md) | 采集开关与浏览器展示边界 | 前端联调 |
 | [收藏功能前端接入](frontend-favorites-sync.md) | 收藏接口、星星状态、个人收藏页与验收要求 | 前端开发、模型交接 |
 | [收藏前端实施提示词](frontend-favorites-prompt.md) | 可复制给其他模型的实施任务 | 模型交接 |
+| [微信通知前端实施交接](frontend-wechat-notifications-handoff.md) | Server 酱回跳、Key 绑定、通知总开关及待补接口契约 | 前端开发、模型交接 |
 
 先读本文，再按职责读前端或后端文档，最后结合接口和已知问题开发。文中的“当前行为”来自代码；“建议”“待完善”不代表已完成。
 

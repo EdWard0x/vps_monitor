@@ -12,4 +12,5 @@ type Group struct {
 	Settings      *SettingsService
 	Dashboard     *DashboardService
 	Favor         *FavorService
+	Notice        *NoticeService
 }

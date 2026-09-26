@@ -66,7 +66,7 @@ type AdminMerchant struct {
 }
 type Stock struct {
 	VPSID         string     `json:"vps_id"`
-	Status        int        `json:"status"`
+	Status        int        `json:"status"` //1 有货,2 无货,3 未知
 	Quantity      *int       `json:"quantity"`
 	LastCheckedAt *time.Time `json:"last_checked_at"`
 	LastInStockAt *time.Time `json:"last_in_stock_at"`

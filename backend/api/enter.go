@@ -14,6 +14,7 @@ type Group struct {
 	SettingsApi      SettingsApi
 	DashboardApi     DashboardApi
 	FavorApi         FavorApi
+	NoticeApi        NoticeApi
 }
 
 func NewGroup(s service.Group, csrfCookie, refreshCookie CookieOptions) Group {
@@ -29,5 +30,6 @@ func NewGroup(s service.Group, csrfCookie, refreshCookie CookieOptions) Group {
 		SettingsApi:      SettingsApi{s.Settings},
 		DashboardApi:     DashboardApi{s.Dashboard},
 		FavorApi:         FavorApi{s.Favor},
+		NoticeApi:        NoticeApi{Service: s.Notice},
 	}
 }

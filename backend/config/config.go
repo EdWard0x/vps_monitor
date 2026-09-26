@@ -32,13 +32,16 @@ type Database struct {
 	MaxIdleConns int
 }
 type Redis struct {
-	Address        string
-	Password       string
-	DB             int
-	FrozenCacheTTL time.Duration
-	Stream         string
-	ConsumerGroup  string
-	ConsumerName   string
+	Address             string
+	Password            string
+	DB                  int
+	FrozenCacheTTL      time.Duration
+	StockStream         string
+	StockConsumerGroup  string
+	StockConsumerName   string
+	NoticeStream        string
+	NoticeConsumerGroup string
+	NoticeConsumerName  string
 }
 type JWT struct {
 	AccessSecret    string
@@ -107,13 +110,16 @@ func Load() (Config, error) {
 			MaxIdleConns: integer("DB_MAX_IDLE_CONNS", 5),
 		},
 		Redis: Redis{
-			Address:        env("REDIS_ADDR", "127.0.0.1:6379"),
-			Password:       os.Getenv("REDIS_PASSWORD"),
-			DB:             integer("REDIS_DB", 0),
-			FrozenCacheTTL: durationSeconds("FROZEN_CACHE_TTL_SECONDS", 300),
-			Stream:         env("STOCK_STREAM", "stock:observations"),
-			ConsumerGroup:  env("STOCK_CONSUMER_GROUP", "vps-monitor"),
-			ConsumerName:   env("STOCK_CONSUMER_NAME", "worker-1"),
+			Address:             env("REDIS_ADDR", "127.0.0.1:6379"),
+			Password:            os.Getenv("REDIS_PASSWORD"),
+			DB:                  integer("REDIS_DB", 0),
+			FrozenCacheTTL:      durationSeconds("FROZEN_CACHE_TTL_SECONDS", 300),
+			StockStream:         env("STOCK_STREAM", "stock:observations"),
+			StockConsumerGroup:  env("STOCK_CONSUMER_GROUP", "vps-monitor"),
+			StockConsumerName:   env("STOCK_CONSUMER_NAME", "worker-1"),
+			NoticeStream:        env("Notice_STREAM", "notice:targets"),
+			NoticeConsumerGroup: env("Notice_CONSUMER_GROUP", "vps-monitor"),
+			NoticeConsumerName:  env("Notice_CONSUMER_NAME", "worker-1"),
 		},
 		JWT: JWT{
 			AccessSecret:    os.Getenv("JWT_ACCESS_SECRET"),

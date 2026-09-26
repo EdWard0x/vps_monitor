@@ -29,7 +29,7 @@ func (s *FavorService) AddFavors(ctx context.Context, uid string, vpsId string) 
 	normalizedID := catalogID(id)
 
 	// 复用公开详情查询，检查产品、商家及公开可见状态。
-	_, err = NewVPSService(s.DB).Info(ctx, normalizedID)
+	_, err = NewVPSService(s.DB, s.RedisCli).Info(ctx, normalizedID)
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (s *FavorService) ListFavors(ctx context.Context, uid string, in request.VP
 
 	// 复用公开查询规则，包括商家筛选、价格排序、
 	// 产品与商家可见性检查等。
-	vpsService := NewVPSService(s.DB)
+	vpsService := NewVPSService(s.DB, s.RedisCli)
 	query, err := vpsService.query(ctx, in, false)
 	if err != nil {
 		return out, err

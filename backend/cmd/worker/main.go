@@ -32,7 +32,7 @@ func main() {
 		DB:       cfg.Redis.DB,
 	})
 	defer redisClient.Close()
-	redisstreamClient := redisstream.New(redisClient)
+	redisStreamClient := redisstream.New(redisClient)
 	gormDb, sqlDb, _ := initialize.OpenDatabase(cfg.Database)
 	defer sqlDb.Close()
 	stockSvc := service.NewStockService(gormDb)
@@ -40,57 +40,109 @@ func main() {
 	dmitCollect := utilcollect.DmitCollector{Enabled: true}
 	akkoCollect := utilcollect.AkkoCollector{Enabled: true}
 
-	vpsService := service.NewVPSService(gormDb)
+	vpsService := service.NewVPSService(gormDb, redisStreamClient.Redis)
 
-	option := messageiface.ReadOptions{
-		Stream:   cfg.Redis.Stream,
-		Group:    cfg.Redis.ConsumerGroup,
-		Consumer: cfg.Redis.ConsumerName,
+	stockOption := messageiface.ReadOptions{
+		Stream:   cfg.Redis.StockStream,
+		Group:    cfg.Redis.StockConsumerGroup,
+		Consumer: cfg.Redis.StockConsumerName,
 		Count:    cfg.Worker.ReadCount,
 		Block:    cfg.Worker.Block,
 	}
-	consumer := &task.StockConsumer{
+	stockConsumer := &task.StockConsumer{
 		Enabled:          cfg.Worker.Enabled,
 		FlareResolverUrl: cfg.HTTP.FlareResolverUrl,
-		Reader:           redisstreamClient,
-		Acknowledger:     redisstreamClient,
+		Reader:           redisStreamClient,
+		Acknowledger:     redisStreamClient,
 		Service:          stockSvc,
-		Options:          option,
+		Options:          stockOption,
 		Collect:          []ifacecollect.Collector{dmitCollect, akkoCollect},
-		Reclaimer:        redisstreamClient,
+		Reclaimer:        redisStreamClient,
+	}
+	noticeOption := messageiface.ReadOptions{
+		Stream:   cfg.Redis.NoticeStream,
+		Group:    cfg.Redis.NoticeConsumerGroup,
+		Consumer: cfg.Redis.NoticeConsumerName,
+		Count:    cfg.Worker.ReadCount,
+		Block:    cfg.Worker.Block,
+	}
+	noticeConsumer := &task.NoticeConsumer{
+		Enabled:      cfg.Worker.Enabled,
+		Reader:       redisStreamClient,
+		Acknowledger: redisStreamClient,
+		Service:      stockSvc,
+		Options:      noticeOption,
+		Reclaimer:    redisStreamClient,
 	}
 
-	scheduler := &task.CollectionScheduler{
+	collectScheduler := &task.CollectionScheduler{
 		Enabled:  cfg.Worker.Enabled,
 		Interval: time.Minute,
-		Stream:   cfg.Redis.Stream,
+		Stream:   cfg.Redis.StockStream,
 		VPS:      vpsService,
-		Producer: redisstreamClient,
+		Producer: redisStreamClient,
 	}
-	err = redisstreamClient.Redis.XGroupCreateMkStream(ctx, cfg.Redis.Stream, cfg.Redis.ConsumerGroup, "$").Err()
+	noticeScheduler := &task.NoticeScheduler{
+		Enabled:  cfg.Worker.Enabled,
+		Interval: time.Minute,
+		Stream:   cfg.Redis.NoticeStream,
+		VPS:      vpsService,
+		Producer: redisStreamClient,
+	}
+	err = redisStreamClient.Redis.XGroupCreateMkStream(ctx, cfg.Redis.StockStream, cfg.Redis.StockConsumerGroup, "$").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
-		log.Printf("Error creating stream %s: %v", cfg.Redis.Stream, err)
+		log.Printf("Error creating stream %s: %v", cfg.Redis.StockStream, err)
 		return
 	}
+	err = redisStreamClient.Redis.XGroupCreateMkStream(ctx, cfg.Redis.NoticeStream, cfg.Redis.NoticeConsumerGroup, "$").Err()
+	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+		log.Printf("Error creating stream %s: %v", cfg.Redis.StockStream, err)
+		return
+	}
+
 	//监控vps collect开启状态，推送消息
 	go func() {
-		err := scheduler.Run(ctx)
+		err := collectScheduler.Run(ctx)
 		if err != nil {
 			log.Printf("scheduler stopped: %v", err)
 		}
 	}()
 	//消费vps collect
 	go func() {
-		err := consumer.Run(ctx)
+		err := stockConsumer.Run(ctx)
 		if err != nil {
 			log.Printf("consumer stopped: %v", err)
 		}
 	}()
 	//处理vps collect pending消息
 	go func() {
-		if err := consumer.RecoverPending(ctx); err != nil {
+		if err := stockConsumer.RecoverPending(ctx); err != nil {
 			log.Printf("pending recovery stopped: %v", err)
 		}
 	}()
-	<-ctx.Done()
+
+	//监控用户通知开启状态，推送消息
+	go func() {
+		err := noticeScheduler.Run(ctx)
+		if err != nil {
+			log.Printf("scheduler stopped: %v", err)
+		}
+	}()
+	//消费notice
+	go func() {
+		err := noticeConsumer.Run(ctx)
+		if err != nil {
+			log.Printf("consumer stopped: %v", err)
+		}
+	}()
+	//处理notice pending消息
+	go func() {
+		if err := noticeConsumer.RecoverPending(ctx); err != nil {
+			log.Printf("pending recovery stopped: %v", err)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+	}
 }

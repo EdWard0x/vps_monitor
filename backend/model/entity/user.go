@@ -15,6 +15,7 @@ type User struct {
 	Mail           *string `gorm:"uniqueIndex;size:320"`
 	MailVerified   bool    `gorm:"not null;default:false"`
 	MailVerifiedAt *time.Time
-
-	TokenVersion uint64 `gorm:"not null;default:1"`
+	NoticeEnabled  bool   `gorm:"not null;default:false"`
+	ServerTurboKey string `gorm:"size:64;default:''"`
+	TokenVersion   uint64 `gorm:"not null;default:1"`
 }

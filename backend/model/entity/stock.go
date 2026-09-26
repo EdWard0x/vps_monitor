@@ -9,7 +9,7 @@ import (
 type Stock struct {
 	gorm.Model
 	VPSID         uint `gorm:"uniqueIndex;not null"`
-	Status        int  `gorm:"not null;default:3"`
+	Status        int  `gorm:"not null;default:3"` //1 有货,2 无货,3 未知
 	Quantity      *int
 	LastCheckedAt *time.Time
 	LastInStockAt *time.Time

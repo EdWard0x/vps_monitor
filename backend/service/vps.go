@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -14,14 +16,23 @@ import (
 	"vpsmonitor/model/response"
 	"vpsmonitor/utils/pagination"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-type VPSService struct{ DB *gorm.DB }
+type VPSService struct {
+	DB       *gorm.DB
+	RedisCli *redis.Client
+}
 
-func NewVPSService(db *gorm.DB) *VPSService { return &VPSService{DB: db} }
+func NewVPSService(db *gorm.DB, redisCli *redis.Client) *VPSService {
+	return &VPSService{
+		DB:       db,
+		RedisCli: redisCli,
+	}
+}
 
 func editableVPS(in request.VPSEditable) (entity.VPS, error) {
 	merchantID, err := parseCatalogID(in.MerchantID)
@@ -160,6 +171,16 @@ func (s *VPSService) Delete(ctx context.Context, rawID string) error {
 	return nil
 }
 
+/*
+商家存在且未删除
+并且 VPS 未删除
+并且商家启用
+并且 VPS 启用
+并且属于商家 1
+并且币种是 USD
+并且按月付款
+并且库存状态为有货
+*/
 func (s *VPSService) query(ctx context.Context, in request.VPSListQuery, admin bool) (*gorm.DB, error) {
 	query := s.DB.WithContext(ctx).Model(&entity.VPS{}).
 		Joins("JOIN merchant ON merchant.id = vps_detail.merchant_id AND merchant.deleted_at IS NULL").
@@ -345,6 +366,9 @@ func (s *VPSService) CollectionAllowed(ctx context.Context, rawID string) (bool,
 	return count > 0, nil
 }
 
+/*
+查询已经开启collect的vps
+*/
 func (s *VPSService) ListCollectionTargets(ctx context.Context) ([]dto.CollectionTask, error) {
 	var ct []dto.CollectionTask
 	err := s.DB.WithContext(ctx).Model(&entity.VPS{}).
@@ -363,4 +387,61 @@ func (s *VPSService) ListCollectionTargets(ctx context.Context) ([]dto.Collectio
 		return nil, catalogDBError(err)
 	}
 	return ct, nil
+}
+
+/*
+查询开启通知功能的用户
+*/
+func (s *VPSService) ListNoticeEnabledUserTargets(ctx context.Context) ([]entity.User, error) {
+	var u []entity.User
+	err := s.DB.WithContext(ctx).Model(&entity.User{}).
+		Where("notice_enabled = ?", true).Find(&u).Error
+	if err != nil {
+		return nil, catalogDBError(err)
+	}
+	return u, nil
+}
+
+/*
+查询开启通知的用户对应收藏的vps(只查有货的vps)
+*/
+func (s *VPSService) ListVpsWithNoticeEnabledTargets(ctx context.Context, userList []entity.User) ([]dto.NoticeEnabledTask, error) {
+
+	var uids []uint
+	for _, user := range userList {
+		uids = append(uids, user.ID)
+	}
+	var b []dto.NoticeEnabledTask
+	for _, id := range uids {
+		favorVpsIds, err := s.RedisCli.SMembers(ctx, fmt.Sprintf("user:favors:%s", strconv.Itoa(int(id)))).Result()
+		if err != nil {
+			return nil, err
+		}
+		if len(favorVpsIds) == 0 {
+			continue
+		}
+		q, err := s.query(ctx, request.VPSListQuery{}, false)
+		if err != nil {
+			return nil, err
+		}
+		//查询哪些vps有货
+		var tmp []struct {
+			VpsID   string `json:"vps_id"`
+			VpsName string `json:"vps_name"`
+		}
+		err = q.Select("vps_detail.id as vps_id, vps_detail.name as vps_name").
+			Where("vps_stocks.status = ? and vps_detail.id in ?", 1, favorVpsIds).Find(&tmp).Error
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range tmp {
+			b = append(b, dto.NoticeEnabledTask{
+				UserId:  strconv.Itoa(int(id)),
+				VpsId:   v.VpsID,
+				VpsName: v.VpsName,
+			})
+		}
+	}
+
+	return b, nil
 }

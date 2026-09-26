@@ -9,7 +9,7 @@ import (
 	"vpsmonitor/service"
 )
 
-type CollectionScheduler struct {
+type NoticeScheduler struct {
 	Enabled  bool
 	Interval time.Duration
 	Stream   string
@@ -17,18 +17,22 @@ type CollectionScheduler struct {
 	Producer enqueueiface.Producer
 }
 
-func (c *CollectionScheduler) dispatch(ctx context.Context) error {
-	targets, err := c.VPS.ListCollectionTargets(ctx)
+func (c *NoticeScheduler) dispatch(ctx context.Context) error {
+	userTargets, err := c.VPS.ListNoticeEnabledUserTargets(ctx)
 	if err != nil {
 		return err
 	}
-	for _, target := range targets {
-		payload, err := json.Marshal(target)
-		//fmt.Println(string(payload))
+	noticeEnabledTask, err := c.VPS.ListVpsWithNoticeEnabledTargets(ctx, userTargets)
+	if err != nil {
+		return err
+	}
+	//推送下发通知消息
+	for _, task := range noticeEnabledTask {
+		marshal, err := json.Marshal(task)
 		if err != nil {
 			return err
 		}
-		_, err = c.Producer.Enqueue(ctx, c.Stream, payload)
+		_, err = c.Producer.Enqueue(ctx, c.Stream, marshal)
 		if err != nil {
 			return err
 		}
@@ -36,7 +40,7 @@ func (c *CollectionScheduler) dispatch(ctx context.Context) error {
 	return nil
 }
 
-func (c *CollectionScheduler) Run(ctx context.Context) error {
+func (c *NoticeScheduler) Run(ctx context.Context) error {
 	if !c.Enabled {
 		return nil
 	}

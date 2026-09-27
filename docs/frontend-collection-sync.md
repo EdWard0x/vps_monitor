@@ -18,7 +18,7 @@
 | collector_implemented | AdminSettings | 代码能力标记 |
 | collection_enabled | 管理设置/商家/VPS | 各层保存的许可 |
 | enabled | 管理商家/VPS | 业务启用/公开展示 |
-| stock.status | VPS 内嵌或 stock/info | 1 有货、2 无货、3 未知 |
+| stock.status | VPS 内嵌或 stock/info | 1 有货（数量已知）、2 无货、3 未知、4 有货（数量未知）；有货筛选包含 1、4 |
 | quantity | Stock | null 未提供数量，不能转 0 |
 | last_checked_at | Stock | 最近写入观测时间；不代表必然判定出有/无货 |
 | last_in_stock_at | Stock | 最后确认有货时间 |

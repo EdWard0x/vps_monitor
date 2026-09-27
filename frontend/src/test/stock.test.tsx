@@ -35,6 +35,22 @@ describe('Stock display & collection sync unit tests', () => {
     expect(html).not.toContain('数量未知');
   });
 
+  it('StockBadge renders status=4 as in-stock with unknown quantity', () => {
+    const stock: Stock = {
+      vps_id: '42',
+      status: 4,
+      quantity: null,
+      last_checked_at: '2026-09-18T12:00:00Z',
+      last_in_stock_at: '2026-09-18T12:00:00Z',
+      is_stale: false,
+    };
+    const html = renderToStaticMarkup(React.createElement(StockBadge, { stock }));
+    expect(html).toContain('有货 · 数量未知');
+    expect(html).toContain('bg-emerald-50');
+    expect(html).not.toContain('库存未知');
+    expect(html).not.toContain('0 台');
+  });
+
   it('StockBadge renders out-of-stock as "暂时无货" and does not render 0', () => {
     const stock: Stock = {
       vps_id: '42',

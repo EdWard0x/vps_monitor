@@ -34,7 +34,7 @@ func (c DmitCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 		q := 0
 		return collect.Observation{Quantity: &q}, nil
 	} else if main.Find(`.cart-step-text:contains("Choose Billing Cycle")`).Length() != 0 { //有货提取
-		return collect.Observation{}, nil
+		return collect.Observation{InStock: true}, nil
 	}
 	return collect.Observation{}, errcode.QueryHtmlFailed
 }

@@ -217,10 +217,14 @@ func (s *VPSService) query(ctx context.Context, in request.VPSListQuery, admin b
 		query = query.Where("vps_detail.billing_period = ?", in.BillingPeriod)
 	}
 	if in.Status != nil {
-		if *in.Status < 1 || *in.Status > 3 {
+		if *in.Status < 1 || *in.Status > 4 {
 			return nil, errcode.InvalidArgument
 		}
-		query = query.Where("COALESCE(vps_stocks.status, 3) = ?", *in.Status)
+		if *in.Status == 1 { // “仅看有货”包含数量未知的有货结果。
+			query = query.Where("vps_stocks.status IN ?", []int{1, 4})
+		} else {
+			query = query.Where("COALESCE(vps_stocks.status, 3) = ?", *in.Status)
+		}
 	}
 	switch in.Sort {
 	case "", "updated_desc":
@@ -430,7 +434,7 @@ func (s *VPSService) ListVpsWithNoticeEnabledTargets(ctx context.Context, userLi
 			VpsName string `json:"vps_name"`
 		}
 		err = q.Select("vps_detail.id as vps_id, vps_detail.name as vps_name").
-			Where("vps_stocks.status = ? and vps_detail.id in ?", 1, favorVpsIds).Find(&tmp).Error
+			Where("vps_stocks.status IN ? and vps_detail.id in ?", []int{1, 4}, favorVpsIds).Find(&tmp).Error
 		if err != nil {
 			return nil, err
 		}

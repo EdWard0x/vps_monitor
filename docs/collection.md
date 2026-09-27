@@ -80,18 +80,18 @@ sequenceDiagram
 
 ## 5. 当前采集器能力
 
-两者注册时 Enabled=true，但仍受 Worker 与目录调度开关限制。解析同一 CSS 选择器 `#order-boxes .header-lined h1`，trim 后区分大小写比较 `Out of Stock`。
+两者注册时 Enabled=true，但仍受 Worker 与目录调度开关限制。DMIT 在 `.main-body` 内识别缺货标题或付款周期，Akko 识别缺货标题或配置表单中的付款周期。
 
 | 情况 | DMIT（code=dmit） | Akko（code=akko） |
 | --- | --- | --- |
-| 标题恰为 Out of Stock | Quantity=0 | Quantity=0 |
-| 找到其他标题 | Quantity=nil、无错误 | Quantity=nil、无错误 |
-| 找不到标题 | QueryHtmlFailed | Quantity=nil、无错误 |
+| 缺货标题（DMIT: Out of Stock；Akko: 缺货） | Quantity=0 | Quantity=0 |
+| 识别到付款周期 | InStock=true、Quantity=nil | InStock=true、Quantity=nil |
+| 无法识别库存状态 | QueryHtmlFailed | QueryHtmlFailed |
 | 解析服务请求失败 | 转为 FlareResolveFailed | 返回原错误 |
 | HTML 构造失败 | 转为 QueryHtmlFailed | 返回原错误 |
-| 请求 maxTimeout | 10000 毫秒 | 8000 毫秒 |
+| 请求 maxTimeout | 10000 毫秒 | 10000 毫秒 |
 
-**当前没有生成正库存数量的分支，也没有明确的有货识别规则。** 普通成功返回 nil 数量会写成未知，并刷新 last_checked_at；检查时间更新只说明写入了一个观测，不代表确认了有货/无货。
+当前没有生成正库存数量的分支。确认有货时返回 InStock=true、Quantity=nil，写入状态 4；空 Observation 仍表示未知。检查时间更新只说明写入了一个观测，不代表确认了有货/无货。
 
 FlareRequest 向 `FLARE_RESOLVER_URL` POST `{"cmd":"request.get","url":sourceURL,"maxTimeout":...}`。默认地址 `http://localhost:8191/v1`。当前只校验 HTTP 200 与 JSON 能否解析，未校验 JSON status、solution.status 或响应体大小，HTTP Client 没有独立 Timeout；传递 maxTimeout 不等于 Go 客户端拥有网络超时。
 
@@ -99,11 +99,12 @@ FlareRequest 向 `FLARE_RESOLVER_URL` POST `{"cmd":"request.get","url":sourceURL
 
 `UpdateStock(ctx,vpsId,merchantCode,observation,deliveryID)` 使用处理时当前时间作为 last_checked_at，不使用 scheduled_at。merchantCode 参数当前未使用。
 
-| Quantity | 入库 status | last_in_stock_at |
+| Observation | 入库 status | last_in_stock_at |
 | --- | --- | --- |
-| nil | 3 未知 | 新建为空；更新保留旧值 |
-| 0 | 2 无货 | 新建为空；更新保留旧值 |
-| 正数 | 1 有货 | 设置为本次处理时间 |
+| Quantity=nil、InStock=false | 3 未知 | 新建为空；更新保留旧值 |
+| Quantity=nil、InStock=true | 4 有货但数量未知 | 设置为本次处理时间 |
+| Quantity=0（优先于 InStock） | 2 无货 | 新建为空；更新保留旧值 |
+| Quantity 为正数 | 1 有货 | 设置为本次处理时间 |
 
 负数没有预校验，会尝试按有货处理，最终被数据库非负约束拒绝；不要把此路径当作支持负库存。
 
@@ -144,7 +145,7 @@ XACK 只移除 PEL 记录，不删除 Stream entry；当前主流程未调用 XD
 2. code 与管理端商家 code 一致；商家 code 创建后不可修改。
 3. 用保存的正常/无货/页面变化 HTML 样本验证解析，不能把“没有无货文案”直接认定为有货。
 4. 在 worker main 注册唯一 code 的实例；前端不新增 Redis 字段。
-5. 当前 Observation 只有 Quantity，表达“有货但数量未知”需要先扩展内部协议和写入逻辑，不能随意编造数量 1。
+5. 有货但数量未知时返回 `Observation{InStock: true}`；缺货返回 Quantity=0；已知正库存返回实际 Quantity，不能随意编造数量 1。
 6. 在隔离环境验证调度、写入、旧 ID、失败 ACK 策略后，再开放该商家的开关。
 
 若后续扩容，优先拆分唯一调度器与多消费者：当前每启动一个 Worker 都会重复扫描入队。消费者名称应唯一；仅更换名称不能解决重复调度。

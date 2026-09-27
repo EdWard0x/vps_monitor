@@ -22,4 +22,6 @@ go run ./cmd/migrate down --dir migrations
 
 `002_notifications` 在基线上新增 users.notice_enabled、users.server_turbo_key、notices 表及 `(user_id, vps_id)` 联合唯一约束，并补齐当前 VPS 模型的 has_stock 列。库存通知的有货判断仍以 vps_stocks.status 为准，has_stock 不代替库存采集结果。新用户字段默认关闭通知、Key 为空，保留原有用户与库存数据。
 
-当前 API 就绪检查要求迁移版本为 2。新增迁移时同步更新 `service.RequiredMigrationVersion`，由迁移测试检查版本一致性。回滚 002 会删除新增表和列及其中通知数据；正常启动仅执行 up，不执行 down。
+`003_stock_status` 允许库存状态 4（有货但数量未知），不改写历史状态 3；重新采集后更新。回滚时将 4 转为 1 并保留空数量和时间。
+
+当前 API 就绪检查要求迁移版本为 3。新增迁移时同步更新 `service.RequiredMigrationVersion`，由迁移测试检查版本一致性。回滚 002 会删除新增表和列及其中通知数据；正常启动仅执行 up，不执行 down。

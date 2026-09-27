@@ -24,7 +24,7 @@ func (s *DashboardService) GetSummary(ctx context.Context) (response.DashboardSu
 		(SELECT COUNT(*) FROM merchant WHERE deleted_at IS NULL) AS merchant_count,
 		(SELECT COUNT(*) FROM vps_detail v JOIN merchant m ON m.id = v.merchant_id AND m.deleted_at IS NULL WHERE v.deleted_at IS NULL) AS vps_count,
 		(SELECT COUNT(*) FROM vps_detail v JOIN merchant m ON m.id = v.merchant_id AND m.deleted_at IS NULL
-		 JOIN vps_stocks s ON s.vps_id = v.id AND s.deleted_at IS NULL WHERE v.deleted_at IS NULL AND s.status = 1) AS in_stock_count,
+		 JOIN vps_stocks s ON s.vps_id = v.id AND s.deleted_at IS NULL WHERE v.deleted_at IS NULL AND s.status IN (1, 4)) AS in_stock_count,
 		(SELECT COUNT(*) FROM vps_detail v JOIN merchant m ON m.id = v.merchant_id AND m.deleted_at IS NULL
 		 LEFT JOIN vps_stocks s ON s.vps_id = v.id AND s.deleted_at IS NULL WHERE v.deleted_at IS NULL AND COALESCE(s.status, 3) = 3) AS unknown_stock_count`).Scan(&out).Error
 	if err != nil {

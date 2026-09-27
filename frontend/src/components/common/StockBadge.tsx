@@ -25,6 +25,9 @@ export const StockBadge: React.FC<StockBadgeProps> = ({ stock, showStaleNotice =
   if (status === 1) {
     text = quantity !== null && quantity !== undefined ? `有货 · 剩余 ${quantity} 台` : '有货';
     variant = 'green';
+  } else if (status === 4) {
+    text = '有货 · 数量未知';
+    variant = 'green';
   } else if (status === 2) {
     text = '暂时无货';
     variant = 'red';

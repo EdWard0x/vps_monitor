@@ -76,7 +76,7 @@ AccountUser 在 PublicUser 上增加 mail:string|null、mail_verified:boolean、
 | DELETE `/admin/vps/delete` | 管理 | id | null |
 | GET `/stock/info` | 公开 | vps_id | Stock |
 
-VPSListQuery：page、page_size、q、merchant_id、currency、billing_period、status、sort。status 仅 1/2/3；sort 为 updated_desc（默认）、price_asc、price_desc；币种查询归一化。公开请求不能通过 enabled 参数查看停用项。
+VPSListQuery：page、page_size、q、merchant_id、currency、billing_period、status、sort。status 支持 1/2/3/4；查询 1 返回全部有货（状态 1、4），查询 4 仅返回有货但数量未知；sort 为 updated_desc（默认）、price_asc、price_desc；币种查询归一化。公开请求不能通过 enabled 参数查看停用项。
 
 Merchant：id、code、name、website_url。AdminMerchant 增加 enabled、collection_enabled、created_at、updated_at。
 
@@ -116,7 +116,7 @@ Stock：
 ```ts
 interface Stock {
   vps_id: string;
-  status: 1 | 2 | 3; // 有货、无货、未知
+  status: 1 | 2 | 3 | 4; // 有货（数量已知）、无货、未知、有货（数量未知）
   quantity: number | null;
   last_checked_at: string | null;
   last_in_stock_at: string | null;
@@ -124,7 +124,7 @@ interface Stock {
 }
 ```
 
-无记录返回未知/null/过期；15 分钟过期阈值不会覆盖状态。HTTP 类型允许有货但未知数量，当前 Worker 的 Quantity 推导逻辑不能生成此组合。没有 delivery_id、observation_version、Stream ID 输出。
+无记录返回未知/null/过期；15 分钟过期阈值不会覆盖状态。Worker 在 Quantity=nil 且 InStock=true 时写入状态 4，并更新最后有货时间；前端兼容旧数据 status=1、quantity=null。没有 delivery_id、observation_version、Stream ID 输出。
 
 公开详情、列表和库存都检查商家/VPS 可见性。隐藏、删除、不存在统一 404；没有公开资源时不能由 stock/info 绕过限制。删除商家若仍有未删除 VPS 返回 409，软删除不会释放唯一 code。
 

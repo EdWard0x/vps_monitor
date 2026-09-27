@@ -55,6 +55,9 @@ func (s *StockService) UpdateStock(ctx context.Context, vpsId string, merchantCo
 	now := time.Now()
 	var status int
 	switch {
+	case observation.Quantity == nil && observation.InStock:
+		status = 4
+		lastInStockAt = &now
 	case observation.Quantity == nil:
 		status = 3
 	case *observation.Quantity == 0:

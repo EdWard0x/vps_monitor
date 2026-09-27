@@ -16,4 +16,5 @@ type CollectRequest struct {
 
 type Observation struct {
 	Quantity *int `json:"quantity,omitempty"`
+	InStock  bool `json:"in_stock,omitempty"` // Quantity 为空时，明确表示有货但数量未知。
 }

@@ -511,7 +511,7 @@ components:
     MerchantID: {name: merchant_id, in: query, schema: {$ref: '#/components/schemas/ID'}}
     Currency: {name: currency, in: query, schema: {type: string, pattern: '^[A-Za-z]{3}$'}}
     BillingPeriod: {name: billing_period, in: query, schema: {$ref: '#/components/schemas/BillingPeriod'}}
-    StockStatus: {name: status, in: query, schema: {type: integer, enum: [1, 2, 3]}}
+    StockStatus: {name: status, in: query, description: '1 查询全部有货（状态 1、4），4 仅查询有货但数量未知，2/3 按状态匹配', schema: {type: integer, enum: [1, 2, 3, 4]}}
     Sort: {name: sort, in: query, schema: {type: string, enum: [updated_desc, price_asc, price_desc], default: updated_desc}}
   requestBodies:
     Register: {$ref: '#/components/x-json-bodies/Register'}
@@ -705,7 +705,7 @@ components:
       required: [vps_id, status, quantity, last_checked_at, last_in_stock_at, is_stale]
       properties:
         vps_id: {$ref: '#/components/schemas/ID'}
-        status: {type: integer, enum: [1, 2, 3], description: 1=有货，2=无货，3=未知}
+        status: {type: integer, enum: [1, 2, 3, 4], description: 1=有货（数量已知），2=无货，3=未知，4=有货（数量未知）}
         quantity: {type: [integer, 'null'], minimum: 0}
         last_checked_at: {type: [string, 'null'], format: date-time}
         last_in_stock_at: {type: [string, 'null'], format: date-time}

@@ -30,7 +30,7 @@ func (c AkkoCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 		q := 0
 		return collect.Observation{Quantity: &q}, nil
 	} else if doc.Find(`#frmConfigureProduct label:contains("付款周期")`).Length() != 0 { //有货提取
-		return collect.Observation{}, nil
+		return collect.Observation{InStock: true}, nil
 	}
 	return collect.Observation{}, errcode.QueryHtmlFailed
 }

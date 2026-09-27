@@ -240,7 +240,7 @@ export const accountHandlers = [
     }
     if (statusStr !== null && statusStr !== undefined && statusStr !== '') {
       const st = Number(statusStr);
-      favoritedVps = favoritedVps.filter((v) => v.stock?.status === st);
+      favoritedVps = favoritedVps.filter((v) => v.stock?.status === st || (st === 1 && v.stock?.status === 4));
     }
 
     // 排序

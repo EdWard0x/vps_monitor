@@ -90,6 +90,7 @@ export const VpsFilter: React.FC<VpsFilterProps> = ({
             options={[
               { value: '', label: '全部库存' },
               { value: '1', label: '仅看有货' },
+              { value: '4', label: '有货（数量未知）' },
               { value: '2', label: '仅看缺货' },
               { value: '3', label: '状态未知' },
             ]}

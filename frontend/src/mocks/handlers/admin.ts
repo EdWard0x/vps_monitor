@@ -33,7 +33,7 @@ export const adminHandlers = [
     if (authError) return authError;
 
     const frozenCount = mockUsers.filter((u) => u.frozen).length;
-    const inStock = mockVpsList.filter((v) => v.stock?.status === 1).length;
+    const inStock = mockVpsList.filter((v) => v.stock?.status === 1 || v.stock?.status === 4).length;
     const unknownStock = mockVpsList.filter((v) => v.stock?.status === 3).length;
 
     return HttpResponse.json({

@@ -26,7 +26,7 @@ export interface VpsDetailCardProps {
 }
 
 export const VpsDetailCard: React.FC<VpsDetailCardProps> = ({ vps }) => {
-  const isAvailable = vps.stock?.status === 1;
+  const isAvailable = vps.stock?.status === 1 || vps.stock?.status === 4;
 
   return (
     <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-8 shadow-xs space-y-8">

@@ -13,6 +13,8 @@ API 默认监听 :8080，前端开发 :5173，解析服务默认 localhost:8191/
 
 ## 2. 本地初始化
 
+2026-09-27 启动补充：新增 `002_notifications`，已有 001 的开发库需要再次执行 `go run ./cmd/migrate up --dir migrations`。就绪检查已支持版本 2；通知 Stream 配置名统一为 `NOTICE_STREAM`、`NOTICE_CONSUMER_GROUP`、`NOTICE_CONSUMER_NAME`。
+
 先准备隔离的开发数据库与 Redis，不覆盖已存在的配置。首次复制模板：
 
 ```powershell
@@ -41,6 +43,19 @@ npm run dev
 前端通过 Vite 将 /api 代理至本机 API，默认无需改 API_BASE_URL。配置 FRONTEND_ORIGINS 为实际浏览器来源（例如 http://localhost:5173），127.0.0.1 与 localhost 是不同来源。
 
 先检查 `/health/live`、`/health/ready`，再访问前端。API 运行不自动迁移，不自动创建管理员或演示数据。
+
+若 Windows 在 5173 报 `EACCES`，使用 `netsh interface ipv4 show excludedportrange protocol=tcp` 检查是否为系统保留端口。可改用 15173，无需调整系统保留范围：
+
+```powershell
+# backend 目录；仅覆盖当前终端进程的配置，不修改 .env。
+$env:FRONTEND_ORIGINS = 'http://localhost:5173,http://localhost:15173'
+go run ./cmd/api
+
+# 另一终端的 frontend 目录。
+npm run dev -- --host localhost --port 15173 --strictPort
+```
+
+此时浏览器使用 `http://localhost:15173`，Vite 仍将 `/api` 代理到 8080。先验证网站与 Key 设置页面；当前两个采集器只明确识别无货，自动补货通知仍依赖后续补全有货识别。API、前端和 Worker 分别启动，启动网站本身不需要启动 Worker。
 
 ## 3. 首个管理员
 

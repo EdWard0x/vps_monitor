@@ -34,7 +34,7 @@ func TestInitialMigrationMatchesCurrentScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 1 || files[0].Version != 1 || files[0].Name != "initial" {
+	if len(files) == 0 || files[0].Version != 1 || files[0].Name != "initial" {
 		t.Fatalf("unexpected migrations: %#v", files)
 	}
 	lower := strings.ToLower(files[0].UpSQL)
@@ -51,6 +51,33 @@ func TestInitialMigrationMatchesCurrentScope(t *testing.T) {
 	for index, statement := range migrationSplitPattern.Split(strings.ReplaceAll(files[0].UpSQL, "\r\n", "\n"), -1) {
 		if statement = strings.TrimSpace(statement); statement != "" && strings.Count(statement, ";") != 1 {
 			t.Errorf("up statement %d must contain exactly one command terminator", index+1)
+		}
+	}
+}
+
+func TestNotificationsMigrationAndRequiredVersion(t *testing.T) {
+	files, err := loadMigrationFiles(filepath.Join("..", "migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != RequiredMigrationVersion || files[len(files)-1].Version != RequiredMigrationVersion {
+		t.Fatal("readiness version does not match bundled migrations")
+	}
+	if files[1].Name != "notifications" {
+		t.Fatal("missing notification migration")
+	}
+	for _, required := range []string{"ADD COLUMN notice_enabled", "ADD COLUMN server_turbo_key", "ADD COLUMN has_stock", "CREATE TABLE notices", "UNIQUE (user_id, vps_id)", "send_notice_times", "send_at"} {
+		if !strings.Contains(files[1].UpSQL, required) {
+			t.Errorf("missing notification schema: %s", required)
+		}
+	}
+	for _, file := range files {
+		for _, sql := range []string{file.UpSQL, file.DownSQL} {
+			for _, statement := range migrationSplitPattern.Split(strings.ReplaceAll(sql, "\r\n", "\n"), -1) {
+				if strings.TrimSpace(statement) != "" && strings.Count(statement, ";") != 1 {
+					t.Errorf("migration %d must separate statements", file.Version)
+				}
+			}
 		}
 	}
 }

@@ -19,6 +19,8 @@ func InitMeRouter(me *gin.RouterGroup, a api.Group) {
 	me.DELETE("/delFavor", a.FavorApi.DelFavors)
 
 	//通知
+	me.GET("/notice", a.NoticeApi.GetNotice)
+	me.PUT("/notice/server-key", a.NoticeApi.BindServerKey)
 	me.POST("/addNotice", a.NoticeApi.AddNotices)
 	me.DELETE("/delNotice", a.NoticeApi.DelNotices)
 }

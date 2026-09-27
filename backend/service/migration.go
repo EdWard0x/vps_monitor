@@ -18,6 +18,9 @@ import (
 
 const migrationLockID int64 = 867530912473
 
+// RequiredMigrationVersion must track the latest bundled migration.
+const RequiredMigrationVersion = 2
+
 var (
 	migrationFilePattern  = regexp.MustCompile(`^([0-9]+)_([a-z0-9][a-z0-9_-]*)\.(up|down)\.sql$`)
 	migrationSplitPattern = regexp.MustCompile(`(?m)^\s*-- migrate:split\s*$`)

@@ -3,6 +3,10 @@ package request
 type UpdateMe struct {
 	Nickname string `json:"nickname" binding:"required"`
 }
+
+type BindServerKey struct {
+	SendKey string `json:"send_key" binding:"required"`
+}
 type ChangePassword struct {
 	CurrentPassword string `json:"current_password" binding:"required"`
 	NewPassword     string `json:"new_password" binding:"required"`

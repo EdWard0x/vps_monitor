@@ -13,9 +13,11 @@ import (
 	frozeiface "vpsmonitor/iface/froze"
 	"vpsmonitor/middle"
 	"vpsmonitor/router"
+	"vpsmonitor/service"
 	"vpsmonitor/utils/redisfrozen"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -48,7 +50,11 @@ func New(cfg config.Config) (*App, error) {
 		}
 		frozenCache = redisfrozen.New(redisConnection.Client)
 	}
-	services := BuildServices(cfg, dbForServices, frozenCache, redisConnection.Client)
+	var redisClient *redis.Client
+	if redisConnection != nil {
+		redisClient = redisConnection.Client
+	}
+	services := BuildServices(cfg, dbForServices, frozenCache, redisClient)
 	apis := api.NewGroup(
 		services,
 		api.CookieOptions{
@@ -89,7 +95,7 @@ func New(cfg config.Config) (*App, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			var migrationCount, firstVersion, lastVersion int
-			if err := raw.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&migrationCount, &firstVersion, &lastVersion); err != nil || migrationCount != 1 || firstVersion != 1 || lastVersion != 1 {
+			if err := raw.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MIN(version), 0), COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&migrationCount, &firstVersion, &lastVersion); err != nil || migrationCount != service.RequiredMigrationVersion || firstVersion != 1 || lastVersion != service.RequiredMigrationVersion {
 				return false
 			}
 			return redisConnection.Ping(ctx) == nil

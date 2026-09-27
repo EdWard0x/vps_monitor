@@ -29,7 +29,6 @@ type NoticeConsumer struct {
 	Reclaimer    messageiface.Reclaimer
 }
 
-// Run 默认不读取消息；启用后在处理和确认语义完成前也拒绝消费，防止真实消息丢失。
 func (c *NoticeConsumer) Run(ctx context.Context) error {
 	if !c.Enabled {
 		return nil

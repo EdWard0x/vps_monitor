@@ -130,6 +130,7 @@ func TestRouteContractHasNoRemovedModules(t *testing.T) {
 		"GET /api/v1/auth/csrf", "POST /api/v1/auth/register", "POST /api/v1/auth/login", "POST /api/v1/auth/refresh", "POST /api/v1/auth/logout",
 		"POST /api/v1/auth/password-reset/code", "POST /api/v1/auth/password-reset/confirm",
 		"GET /api/v1/me/info", "PUT /api/v1/me/update", "PUT /api/v1/me/password", "POST /api/v1/me/mail/code", "POST /api/v1/me/mail/verify",
+		"GET /api/v1/me/notice", "PUT /api/v1/me/notice/server-key", "POST /api/v1/me/addNotice", "DELETE /api/v1/me/delNotice",
 		"GET /api/v1/merchant/list", "GET /api/v1/merchant/info", "GET /api/v1/vps/list", "GET /api/v1/vps/info", "GET /api/v1/stock/info", "GET /api/v1/settings/info",
 		"GET /api/v1/admin/user/list", "GET /api/v1/admin/user/info", "PUT /api/v1/admin/user/update", "PUT /api/v1/admin/user/role", "POST /api/v1/admin/user/resetPassword",
 		"POST /api/v1/admin/froze/freeze", "POST /api/v1/admin/froze/unfreeze",
@@ -163,7 +164,13 @@ func (f *fakeMessages) Read(context.Context, messageiface.ReadOptions) ([]messag
 	f.reads++
 	return []messageiface.Delivery{{ID: "1"}}, nil
 }
-func (f *fakeMessages) Ack(context.Context, string) error { f.acks++; return nil }
+func (f *fakeMessages) Ack(context.Context, messageiface.ReadOptions, string) error {
+	f.acks++
+	return nil
+}
+func (f *fakeMessages) Del(context.Context, messageiface.ReadOptions, string) error {
+	return nil
+}
 func TestDisabledStockConsumerTouchesNoMessages(t *testing.T) {
 	fake := &fakeMessages{}
 	consumer := task.StockConsumer{Enabled: false, Reader: fake, Acknowledger: fake}

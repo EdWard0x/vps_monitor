@@ -16,7 +16,7 @@
 | [前端采集联调速查](frontend-collection-sync.md) | 采集开关与浏览器展示边界 | 前端联调 |
 | [收藏功能前端接入](frontend-favorites-sync.md) | 收藏接口、星星状态、个人收藏页与验收要求 | 前端开发、模型交接 |
 | [收藏前端实施提示词](frontend-favorites-prompt.md) | 可复制给其他模型的实施任务 | 模型交接 |
-| [微信通知前端实施交接](frontend-wechat-notifications-handoff.md) | Server 酱回跳、Key 绑定、通知总开关及待补接口契约 | 前端开发、模型交接 |
+| [微信通知前端实施交接](frontend-wechat-notifications-handoff.md) | Server 酱回跳、Key 绑定、通知总开关及已实现后端契约（2026-09-27） | 前端开发、模型交接 |
 
 先读本文，再按职责读前端或后端文档，最后结合接口和已知问题开发。文中的“当前行为”来自代码；“建议”“待完善”不代表已完成。
 
@@ -44,7 +44,7 @@ flowchart LR
 - 当前 Worker 将调度器、消费者、Pending 清理器放在同一进程，尚未拆出独立调度服务。
 - 商家和 VPS 的 `enabled` 控制业务启用/公开展示，`collection_enabled` 保存采集许可。
 - 采集已有实现，但当前两个采集器只明确识别无货；Pending 清理直接 ACK，限制见采集文档。
-- 没有库存历史、立即采集、Worker 在线状态、订阅通知、评论、设备会话管理 API。
+- 已补齐微信通知设置、Key 保存、全部收藏通知开启/关闭 API；前端和真实扫码联调待完成。没有库存历史、立即采集、Worker 在线状态、评论、设备会话管理 API。
 
 ## 技术栈与目录
 

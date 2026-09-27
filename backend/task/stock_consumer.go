@@ -42,8 +42,12 @@ func (c *StockConsumer) Run(ctx context.Context) error {
 			return err
 		}
 		for _, delivery := range deliveries {
+			var t dto.CollectionTask
+			if err := json.Unmarshal(delivery.Payload, &t); err != nil {
+				log.Printf("获取消息时解析payload失败：%v", err)
+			}
 			if err := c.processDelivery(ctx, delivery); err != nil {
-				log.Printf("process message id=%s: %v", delivery.ID, err)
+				log.Printf("process message id=%s, vpsID:%s, err: %v", delivery.ID, t.VpsId, err)
 			}
 		}
 	}
@@ -77,13 +81,10 @@ func (c *StockConsumer) RecoverPending(ctx context.Context) error {
 					break
 				}
 				for _, msg := range msgs {
-					//if err := c.processDelivery(ctx, msg); err != nil {
-					//	log.Printf("process claimed message id=%s: %v", msg.ID, err)
-					//}
-
 					//由于pending消息不适合再进行一次业务处理，否则会多次触发网站风控，选择直接ack
 					err := c.Acknowledger.Ack(ctx, c.Options, msg.ID)
 					if err != nil {
+
 						log.Printf("pending message ack failed, message id=%s: %v", msg.ID, err)
 					}
 				}
@@ -123,11 +124,11 @@ func (c *StockConsumer) processDelivery(ctx context.Context, delivery messageifa
 				}
 				return errcode.QueryHtmlFailed
 			}
-			return fmt.Errorf("collect stock: %w", err) //其他不可预计错误
+			return err //其他不可预计错误
 		}
 		err = c.Service.UpdateStock(ctx, p.VpsId, p.MerchantCode, observation, delivery.ID)
 		if err != nil {
-			return fmt.Errorf("update stock: %w", err)
+			return fmt.Errorf("update stock: %v", err)
 		}
 	}
 

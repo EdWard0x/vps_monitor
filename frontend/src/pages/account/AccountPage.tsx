@@ -5,7 +5,7 @@ import { ProfileSection } from '@/features/account/ProfileSection';
 import { MailBindingSection } from '@/features/account/MailBindingSection';
 import { PasswordChangeSection } from '@/features/account/PasswordChangeSection';
 import { Button } from '@/components/ui/Button';
-import { User, LogOut, Star, ArrowRight } from 'lucide-react';
+import { User, LogOut, Star, ArrowRight, BellRing } from 'lucide-react';
 
 export const AccountPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -65,6 +65,14 @@ export const AccountPage: React.FC = () => {
               <ArrowRight className="w-4 h-4 ml-1 text-gray-400" />
             </Button>
           </Link>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 text-brand-600 flex items-center justify-center shrink-0"><BellRing className="w-5 h-5" /></div>
+            <div><h2 className="text-base font-bold text-gray-900">微信通知</h2><p className="text-xs text-gray-500 mt-0.5">设置 Server 酱 Key 和全部收藏的库存通知</p></div>
+          </div>
+          <Link to="/account/notifications"><Button variant="outline" size="sm" className="w-full sm:w-auto">管理微信通知<ArrowRight className="w-4 h-4 ml-1 text-gray-400" /></Button></Link>
         </div>
 
         <ProfileSection />

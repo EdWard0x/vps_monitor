@@ -13,7 +13,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { getErrorMessage } from '@/lib/http/errors';
-import { Star, Server, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Star, Server, ArrowLeft, RefreshCw, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export const FavoritesPage: React.FC = () => {
@@ -167,6 +167,7 @@ export const FavoritesPage: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-3 self-start sm:self-auto">
+            <Link to="/account/notifications"><Button variant="outline" size="sm"><BellRing className="w-3.5 h-3.5 mr-1.5" />微信通知设置</Button></Link>
             {total > 0 && (
               <span className="text-xs bg-amber-50 text-amber-800 font-medium px-3 py-1.5 rounded-xl border border-amber-200">
                 共收藏 <span className="font-bold">{total}</span> 款套餐

@@ -157,6 +157,68 @@ paths:
         '401': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
 
+  /me/notice:
+    get:
+      tags: [account]
+      operationId: getNotice
+      summary: 查询当前用户微信通知设置，不返回 Key
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/NoticeSettingsSuccess'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /me/notice/server-key:
+    put:
+      tags: [account]
+      operationId: bindServerKey
+      summary: 保存或替换当前用户的 Server 酱 Key，不自动开启通知
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [send_key]
+              properties:
+                send_key:
+                  type: string
+                  writeOnly: true
+                  description: 去掉两端空白后长度为 1–64 个字符，不接受占位符、内部空白或控制字符；仅入库，不验证第三方送达能力
+      responses:
+        '200': {$ref: '#/components/responses/NoticeSettingsSuccess'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /me/addNotice:
+    post:
+      tags: [account]
+      operationId: addNotices
+      summary: 开启全部收藏的微信通知，未绑定 Key 返回业务码 500005
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/NoticeMutationSuccess'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+  /me/delNotice:
+    delete:
+      tags: [account]
+      operationId: delNotices
+      summary: 关闭全部微信通知，不需要 vpsId；保留 Key、收藏和通知历史
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/NoticeMutationSuccess'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+
   /merchant/list:
     get:
       tags: [public]
@@ -470,6 +532,8 @@ components:
     VPSUpdate: {$ref: '#/components/x-json-bodies/VPSUpdate'}
     SettingsUpdate: {$ref: '#/components/x-json-bodies/SettingsUpdate'}
   responses:
+    NoticeSettingsSuccess: {description: 微信通知设置, content: {application/json: {schema: {$ref: '#/components/schemas/NoticeSettingsEnvelope'}}}}
+    NoticeMutationSuccess: {description: 操作成功, content: {application/json: {schema: {$ref: '#/components/schemas/NoticeMutationEnvelope'}}}}
     Error: {description: 业务错误, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
     NullSuccess: {description: 操作成功, content: {application/json: {schema: {$ref: '#/components/schemas/NullEnvelope'}}}}
     CSRFSuccess: {description: CSRF 凭据, content: {application/json: {schema: {$ref: '#/components/schemas/CSRFEnvelope'}}}}
@@ -493,6 +557,20 @@ components:
     AdminSettingsSuccess: {description: 管理设置, content: {application/json: {schema: {$ref: '#/components/schemas/AdminSettingsEnvelope'}}}}
     DashboardSuccess: {description: 管理看板统计, content: {application/json: {schema: {$ref: '#/components/schemas/DashboardEnvelope'}}}}
   schemas:
+    NoticeSettings:
+      type: object
+      required: [notice_enabled, key_bound]
+      properties:
+        notice_enabled: {type: boolean}
+        key_bound: {type: boolean}
+    NoticeSettingsEnvelope:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessBase'}
+        - {type: object, properties: {data: {$ref: '#/components/schemas/NoticeSettings'}}}
+    NoticeMutationEnvelope:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessBase'}
+        - {type: object, properties: {data: {type: string, const: success}}}
     ID: {type: string, pattern: '^[1-9][0-9]*$', examples: ['42']}
     Page:
       type: object
@@ -720,7 +798,7 @@ components:
         collection_enabled: {type: boolean, description: 是否允许采集该 VPS 的库存；仍受全局及所属商家开关限制}
     ErrorCode:
       type: integer
-      enum: [100001, 100003, 100004, 100005, 100006, 200001, 200002, 200003, 200005, 200006, 200009, 200011, 200012, 200013, 200014, 200015, 200016, 200017, 200018, 300001, 300002, 300003, 400001, 900004, 900005]
+      enum: [100001, 100003, 100004, 100005, 100006, 200001, 200002, 200003, 200005, 200006, 200009, 200011, 200012, 200013, 200014, 200015, 200016, 200017, 200018, 300001, 300002, 300003, 400001, 500001, 500005, 900004, 900005]
   x-json-bodies:
     Register: {required: true, content: {application/json: {schema: {type: object, required: [username, nickname, password], properties: {username: {type: string}, nickname: {type: string}, password: {type: string, minLength: 8, maxLength: 72}}}}}}
     Login: {required: true, content: {application/json: {schema: {type: object, required: [username, password], properties: {username: {type: string}, password: {type: string}}}}}}

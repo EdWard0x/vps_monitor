@@ -17,6 +17,11 @@ type AccountUser struct {
 	MailVerifiedAt *time.Time `json:"mail_verified_at"`
 	MailRequired   bool       `json:"mail_required"`
 }
+
+type NoticeSettings struct {
+	NoticeEnabled bool `json:"notice_enabled"`
+	KeyBound      bool `json:"key_bound"`
+}
 type AdminUser struct {
 	PublicUser
 	Frozen bool `json:"frozen"`
@@ -66,7 +71,7 @@ type AdminMerchant struct {
 }
 type Stock struct {
 	VPSID         string     `json:"vps_id"`
-	Status        int        `json:"status"` //1 有货,2 无货,3 未知
+	Status        int        `json:"status"` //1 有货,2 无货,3 未知,4 有货但数量未知
 	Quantity      *int       `json:"quantity"`
 	LastCheckedAt *time.Time `json:"last_checked_at"`
 	LastInStockAt *time.Time `json:"last_in_stock_at"`

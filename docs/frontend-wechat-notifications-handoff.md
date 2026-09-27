@@ -1,8 +1,8 @@
 # 微信库存通知：前端实施与后端接口交接
 
-核对日期：2026-09-26。依据：当前工作区代码与 Server 酱官方说明。
+核对日期：2026-09-27。依据：当前工作区代码与 Server 酱官方说明。
 
-本文供其他模型直接读取并实施。**“现有”是已经读到的代码；“待实现”是本次建议的接口契约，不能假装后端已经提供。** 本次交付只新增文档，不实现前后端功能。
+本文供其他模型直接读取并实施。2026-09-27 已补齐状态查询、Key 保存和全局关闭后端接口；前端页面、回跳和真实扫码联调仍待实施。本文自定义的回跳路径和 state 属于项目设计，并非官方固定参数。
 
 ## 1. 已确定的范围
 
@@ -19,10 +19,10 @@
 | 能力 | 当前事实 |
 | --- | --- |
 | 开启全部通知 | `POST /api/v1/me/addNotice` 已注册；检查 Key 后将 `users.notice_enabled` 设为 `true` |
-| 关闭通知 | `DELETE /api/v1/me/delNotice` 已注册，但 API 仍要求 `vpsId`，Service 是直接返回 nil 的空实现，当前成功响应不代表关闭成功 |
+| 关闭通知 | `DELETE /api/v1/me/delNotice` 已实现，直接关闭总开关，不需要 `vpsId` |
 | 检查 Key | `NoticeService.CheckServerKey(ctx, uid)` 是后端内部方法，没有独立 HTTP 路由；读取数据库中的 Key，不验证 Server 酱是否接受它 |
-| 保存 Key | 尚无接口 |
-| 查询通知设置 | 尚无接口；现有 `/me/info` 响应也未包含通知开关和 Key 绑定状态 |
+| 保存 Key | `PUT /api/v1/me/notice/server-key` 已实现，接收 JSON `send_key` |
+| 查询通知设置 | `GET /api/v1/me/notice` 已实现；`/me/info` 不增加通知字段 |
 | 未绑定错误 | `ServerTurboNoRecord`：业务码 `500005`，当前 HTTP 状态为 500，消息为“未查询到ServerTurbo_key值” |
 | 用户字段 | `users.notice_enabled`、`users.server_turbo_key`；当前 Key 字段声明 `size:64` |
 | 通知记录 | `Notice` 存储用户/VPS、成功发送次数和时间；不是订阅开关表 |
@@ -127,7 +127,7 @@ window.location.assign(target.toString()); // 同一标签页跳转。
 3. 检查 `sessionStorage` 中的流程信息、state 相等且未超过十五分钟；缺失或过期时不自动绑定，提示重新发起流程或回到设置页手动填写。
 4. 等待现有 `AuthContext` 完成静默 refresh，不能仅因为 Access Token 在页面内存中暂时不存在就判定未登录。
 5. 当前用户必须与发起绑定时的 `userId` 一致。未登录或账号变化时停止自动绑定、清空待绑定 Key，转到不含密钥的登录/设置路径，提示登录后重新发起。不得把 Key 放入 `returnTo`。
-6. 条件通过后，使用现有 `apiClient` 将 Key 通过 JSON 请求体传给待实现的保存接口。
+6. 条件通过后，使用现有 `apiClient` 将 Key 通过 JSON 请求体传给保存接口。
 7. 保存失败时保留当前页面内存中的 Key，允许用户重试；不向存储或 URL 写回 Key。不自动重复跳转到 Server 酱。
 8. 保存成功后清空内存 Key、移除绑定流程信息，以 replace 导航回 `/account/notifications`，重新读取后端状态。
 
@@ -139,20 +139,20 @@ window.location.assign(target.toString()); // 同一标签页跳转。
 
 Key 不进入 localStorage、sessionStorage、日志、Toast 或错误上报。回跳文档应使用 `Referrer-Policy: no-referrer`（可在 HTML 尽早设置或用响应头），回跳路径的前端服务器及外层反代日志应省略查询串。地址栏清理不能撤销已经发生的首次页面请求日志。
 
-## 6. 待实现的后端契约
+## 6. 已实现的后端契约
 
 以下全路径带 `/api/v1`；前端通过 `apiClient` 调用时只传 `/me/...`，由现有客户端添加前缀及 Bearer Token。
 
 | 方法与路径 | 状态 | 用途 |
 | --- | --- | --- |
-| `GET /api/v1/me/notice` | 待新增 | 查询当前用户的总开关与 Key 是否存在 |
-| `PUT /api/v1/me/notice/server-key` | 待新增 | 保存或替换当前用户的 Key |
+| `GET /api/v1/me/notice` | 已实现 | 查询当前用户的总开关与 Key 是否存在 |
+| `PUT /api/v1/me/notice/server-key` | 已实现 | 保存或替换当前用户的 Key |
 | `POST /api/v1/me/addNotice` | 已有 | 开启全部收藏的通知 |
-| `DELETE /api/v1/me/delNotice` | 待补实现及调整参数 | 关闭全部通知，不再接收/要求 vpsId |
+| `DELETE /api/v1/me/delNotice` | 已实现 | 关闭全部通知，不要求 vpsId，传入该参数也不会切换成单 VPS 关闭 |
 
 ### 6.1 状态查询
 
-建议返回：
+返回：
 
 ```json
 {
@@ -173,7 +173,7 @@ Key 为空是正常状态：返回 `key_bound: false`，不报数据库错误。
 { "send_key": "用户回跳或手动提供的实际Key" }
 ```
 
-建议服务方法名：`BindServerKey(ctx, uid, key)`；API 用 `principalID(c)` 取得 uid。禁止使用前端提交的 uid 或回跳参数选择数据库用户。
+服务方法名：`BindServerKey(ctx, uid, key)`；API 用 `principalID(c)` 取得 uid，不使用前端提交的 uid 或回跳参数选择数据库用户。
 
 - 校验去掉两端空白后的 Key 非空，不接受字面量 `{key}`、控制字符或内部空白；根据当前字段容量最多接受 64 个字符，不能静默截断。若官方实际生成 Key 超长，应明确返回参数错误并另行调整存储契约。
 - 不凭经验强制只允许 `SCT` 前缀，以免错误拒绝应用专用 AppKey。当前功能针对 Server 酱 Turbo 支持的 Key，不能宣称支持未验证的其他服务 Key。
@@ -192,9 +192,9 @@ Key 为空是正常状态：返回 `key_bound: false`，不报数据库错误。
 
 ### 6.4 关闭全部通知
 
-调整 `DelNotices`：去掉 API 对 `vpsId` 的必填检查；Service 接收 `ctx, uid`，确认用户存在后将 `users.notice_enabled` 设为 `false`。重复关闭应成功。
+`DelNotices` 已去掉 API 对 `vpsId` 的必填检查；Service 接收 `ctx, uid`，确认用户存在后将 `users.notice_enabled` 设为 `false`。重复关闭成功。
 
-为兼容现有写法，成功仍返回 `data: "success"`；前端随后 GET 设置状态，确认 `notice_enabled: false` 才展示已关闭。当前空实现必须先补全，不能把它当成可用接口。
+为兼容现有写法，成功仍返回 `data: "success"`；前端随后 GET 设置状态，确认 `notice_enabled: false` 才展示已关闭。此接口已由空实现补全为数据库更新。
 
 不删除 notice 行，不清空 Key，不删除收藏，也不遍历 Redis 删除消息。
 
@@ -234,11 +234,11 @@ Key 为空是正常状态：返回 `key_bound: false`，不报数据库错误。
 | `frontend/src/pages/account/FavoritesPage.tsx` | 增加微信通知设置链接 |
 | `frontend/src/main.tsx` / 启动模块 | 确保敏感 URL 清理先于路由初始化 |
 | `frontend/index.html`、`frontend/nginx.conf` | 回跳页 Referrer 策略、日志及 SPA 深链接支持；外层反代另行核对 |
-| `backend/api/notice.go`、`backend/service/notice.go`、`backend/router/user.go` | 后端所有者补全上述待实现接口 |
+| `backend/api/notice.go`、`backend/service/notice.go`、`backend/router/user.go` | 已补齐后端接口，前端联调时核对实际部署版本 |
 
 前端开发复用现有 `apiClient`、`AppError`、`AuthContext`、Token refresh 和 Toast。当前生产入口不会启用 MSW，保持真实 API；Mock 只用于测试，不能拿 Mock 掩盖缺失后端接口。不要修改其他功能的错误码以扩大本次范围。
 
-当后端真正落地契约后，同步 `docs/api.md`、`docs/openapi.yaml`；本文里的计划接口在此之前不能被记成已实现。
+后端契约已同步 `docs/api.md`、`docs/openapi.yaml`。数据库迁移不在此次范围内，部署需已有通知用户字段；缺字段产生数据库错误时应按失败展示，不能伪造设置状态。
 
 ## 9. 验收要求
 
@@ -256,4 +256,4 @@ Key 为空是正常状态：返回 `key_bound: false`，不报数据库错误。
 
 ## 10. 可直接交给实施模型的任务
 
-> 请先阅读本文和所列当前源文件，实现注册用户的 Server 酱微信通知设置前端。范围是全部收藏的通知总开关、Key 绑定/更换和外部回跳，不做逐 VPS 取消。修正回跳链接层级，复用项目现有认证、HTTP 和 UI 组件。严格区分已存在与待新增接口，不调用内部 Service、不匹配中文错误消息、不伪造后端成功。先检查后端是否已实现本文契约；缺失时完成可测试的前端与 API 封装，明确列出联调依赖，不擅自声称已上线。回跳 Key 只短暂存于内存并通过已鉴权 JSON 请求保存，不能放进登录 returnTo 或浏览器持久存储。最终说明修改文件、测试结果和仍未完成的真实联调项。
+> 请先阅读本文和所列当前源文件，实现注册用户的 Server 酱微信通知设置前端。范围是全部收藏的通知总开关、Key 绑定/更换和外部回跳，不做逐 VPS 取消。修正回跳链接层级，复用项目现有认证、HTTP 和 UI 组件。状态查询、Key 保存、开启和关闭后端接口已实现；不要调用内部 Service、匹配中文错误消息或伪造后端成功。核对实际部署版本，缺失接口时明确列出联调依赖，不擅自声称已上线。回跳 Key 只短暂存于内存并通过已鉴权 JSON 请求保存，不能放进登录 returnTo 或浏览器持久存储。最终说明修改文件、测试结果和仍未完成的真实联调项。

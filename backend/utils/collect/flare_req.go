@@ -33,7 +33,7 @@ func (m *MilliTimestamp) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func FlareRequest(ctx context.Context, sourceURL string, processorURL string, timeout int) (*Falresolverr, error) {
+func FlareRequest(ctx context.Context, sourceURL string, processorURL string, timeout int, collectName string) (*Falresolverr, error) {
 	payload := struct {
 		Cmd        string `json:"cmd"`
 		URL        string `json:"url"`
@@ -56,7 +56,7 @@ func FlareRequest(ctx context.Context, sourceURL string, processorURL string, ti
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("processor returned status code %d", response.StatusCode)
+		return nil, fmt.Errorf("%s processor returned status code %d", collectName, response.StatusCode)
 	}
 	var result Falresolverr
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {

@@ -34,6 +34,10 @@
 | PUT `/me/password` | 登录 | current_password,new_password | null |
 | POST `/me/mail/code` | 登录 | mail,current_password? | `{verification_id,expires_in,retry_after}` |
 | POST `/me/mail/verify` | 登录 | verification_id,code | AccountUser |
+| GET `/me/notice` | 登录 | 无 | `{notice_enabled,key_bound}`，不返回 Key |
+| PUT `/me/notice/server-key` | 登录 | send_key | `{notice_enabled,key_bound}` |
+| POST `/me/addNotice` | 登录 | 无 | `"success"`，开启全部收藏通知 |
+| DELETE `/me/delNotice` | 登录 | 无，不需要 vpsId | `"success"`，关闭全部通知 |
 | GET `/admin/user/list` | 管理 | page,page_size,q,role,frozen | Page<AdminUser> |
 | GET `/admin/user/info` | 管理 | id | AdminUser |
 | PUT `/admin/user/update` | 管理 | id,nickname | AdminUser |
@@ -43,6 +47,8 @@
 | POST `/admin/froze/unfreeze` | 管理 | user_id | `{user_id,frozen,cache_synced}` |
 
 PublicUser：id、username、nickname、role、created_at、updated_at。
+
+通知接口于 2026-09-27 补全。Key 保存只操作鉴权用户；去掉两端空白后必须为 1–64 个字符，不接受 `{key}`、内部空白、控制字符或无效 UTF-8。不限制 SCT 前缀，以兼容 AppKey；不调用第三方验证，因此绑定成功不等于已验证微信送达。保存 Key 不自动开启通知，重复保存/开启/关闭均可成功。未绑定时开启返回 HTTP 500、业务码 500005（沿用现有错误码）；数据库错误为 500001。关闭保留 Key、收藏和 notice 历史，不操作 Redis Pending。已进入发送流程的消息可能仍送达。详细前端流程见 [微信通知交接](frontend-wechat-notifications-handoff.md)。
 
 AccountUser 在 PublicUser 上增加 mail:string|null、mail_verified:boolean、mail_verified_at:string|null、mail_required:boolean。AdminUser 在 PublicUser 上仅增加 frozen:boolean。角色只允许 user/admin。
 

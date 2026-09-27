@@ -170,7 +170,7 @@ func TestRuntimeRouterFlows(t *testing.T) {
 	if ready.Code != 200 {
 		t.Fatalf("runtime readiness: %d", ready.Code)
 	}
-	services := initialize.BuildServices(cfg, db, redisfrozen.New(rc))
+	services := initialize.BuildServices(cfg, db, redisfrozen.New(rc), rc)
 	sender := &capturedMail{}
 	passwords := passwordutil.Provider{}
 	services.Mail = service.NewMailService(db, sender, passwords)

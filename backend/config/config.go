@@ -117,9 +117,9 @@ func Load() (Config, error) {
 			StockStream:         env("STOCK_STREAM", "stock:observations"),
 			StockConsumerGroup:  env("STOCK_CONSUMER_GROUP", "vps-monitor"),
 			StockConsumerName:   env("STOCK_CONSUMER_NAME", "worker-1"),
-			NoticeStream:        env("Notice_STREAM", "notice:targets"),
-			NoticeConsumerGroup: env("Notice_CONSUMER_GROUP", "vps-monitor"),
-			NoticeConsumerName:  env("Notice_CONSUMER_NAME", "worker-1"),
+			NoticeStream:        env("NOTICE_STREAM", "notice:targets"),
+			NoticeConsumerGroup: env("NOTICE_CONSUMER_GROUP", "vps-monitor"),
+			NoticeConsumerName:  env("NOTICE_CONSUMER_NAME", "worker-1"),
 		},
 		JWT: JWT{
 			AccessSecret:    os.Getenv("JWT_ACCESS_SECRET"),

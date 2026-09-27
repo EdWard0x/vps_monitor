@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"vpsmonitor/iface/collect"
+	"vpsmonitor/model/errcode"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -17,7 +18,7 @@ func (c AkkoCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if !c.Enabled {
 		return collect.Observation{}, nil
 	}
-	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 8000)
+	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 10000, c.Name())
 	if err != nil {
 		return collect.Observation{}, err
 	}
@@ -25,14 +26,11 @@ func (c AkkoCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if err != nil {
 		return collect.Observation{}, err
 	}
-	title := doc.Find("#order-boxes .header-lined h1")
-	if title.Length() == 0 {
-		return collect.Observation{}, nil
-	}
-	text := strings.TrimSpace(title.Text())
-	if text == "Out of Stock" {
+	if doc.Find(`.header-lined h1:contains("缺货")`).Length() != 0 { //缺货提取
 		q := 0
 		return collect.Observation{Quantity: &q}, nil
+	} else if doc.Find(`#frmConfigureProduct label:contains("付款周期")`).Length() != 0 { //有货提取
+		return collect.Observation{}, nil
 	}
-	return collect.Observation{}, nil
+	return collect.Observation{}, errcode.QueryHtmlFailed
 }

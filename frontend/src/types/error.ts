@@ -29,6 +29,8 @@ export const BusinessCode = {
 
   DATABASE_ERROR: 400001,
 
+  SERVER_TURBO_NO_RECORD: 500005,
+
   INTERNAL_ERROR: 900001,
   DEPENDENCY_UNAVAILABLE: 900004,
   NOT_IMPLEMENTED: 900005,
@@ -65,6 +67,8 @@ export const BusinessCodeMessages: Record<number, string> = {
   300003: '当前密码错误',
 
   400001: '数据库操作失败，请稍后重试',
+
+  500005: '请先绑定 Server 酱 Key',
 
   900001: '服务暂时异常，请稍后重试',
   900004: '服务依赖暂不可用，请稍后重试',

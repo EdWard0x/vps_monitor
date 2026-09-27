@@ -33,7 +33,10 @@ func main() {
 	})
 	defer redisClient.Close()
 	redisStreamClient := redisstream.New(redisClient)
-	gormDb, sqlDb, _ := initialize.OpenDatabase(cfg.Database)
+	gormDb, sqlDb, err := initialize.OpenDatabase(cfg.Database)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer sqlDb.Close()
 	stockSvc := service.NewStockService(gormDb)
 
@@ -77,14 +80,14 @@ func main() {
 
 	collectScheduler := &task.CollectionScheduler{
 		Enabled:  cfg.Worker.Enabled,
-		Interval: time.Minute,
+		Interval: time.Minute * 5,
 		Stream:   cfg.Redis.StockStream,
 		VPS:      vpsService,
 		Producer: redisStreamClient,
 	}
 	noticeScheduler := &task.NoticeScheduler{
 		Enabled:  cfg.Worker.Enabled,
-		Interval: time.Minute,
+		Interval: time.Minute * 2,
 		Stream:   cfg.Redis.NoticeStream,
 		VPS:      vpsService,
 		Producer: redisStreamClient,

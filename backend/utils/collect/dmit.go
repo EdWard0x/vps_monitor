@@ -18,7 +18,7 @@ func (c DmitCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if !c.Enabled {
 		return collect.Observation{}, nil
 	}
-	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 10000)
+	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 10000, c.Name())
 	if err != nil {
 		return collect.Observation{}, errcode.FlareResolveFailed
 	}
@@ -26,14 +26,15 @@ func (c DmitCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if err != nil {
 		return collect.Observation{}, errcode.QueryHtmlFailed
 	}
-	title := doc.Find("#order-boxes .header-lined h1")
-	if title.Length() == 0 {
+	main := doc.Find(".main-body")
+	if main.Length() == 0 {
 		return collect.Observation{}, errcode.QueryHtmlFailed
 	}
-	text := strings.TrimSpace(title.Text())
-	if text == "Out of Stock" {
+	if main.Find(`.header-lined h1:contains("Out of Stock")`).Length() != 0 { //缺货提取
 		q := 0
 		return collect.Observation{Quantity: &q}, nil
+	} else if main.Find(`.cart-step-text:contains("Choose Billing Cycle")`).Length() != 0 { //有货提取
+		return collect.Observation{}, nil
 	}
-	return collect.Observation{}, nil
+	return collect.Observation{}, errcode.QueryHtmlFailed
 }

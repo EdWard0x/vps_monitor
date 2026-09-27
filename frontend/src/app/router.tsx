@@ -18,6 +18,8 @@ import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { PasswordResetPage } from '@/pages/auth/PasswordResetPage';
 import { AccountPage } from '@/pages/account/AccountPage';
 import { FavoritesPage } from '@/pages/account/FavoritesPage';
+import { NotificationSettingsPage } from '@/pages/account/NotificationSettingsPage';
+import { ServerChanCallbackPage } from '@/pages/account/ServerChanCallbackPage';
 
 // 管理员后台页面（懒加载）
 const AdminDashboardPage = lazy(() =>
@@ -97,6 +99,12 @@ export const routes: RouteObject[] = [
           </AuthGuard>
         ),
       },
+      {
+        path: 'account/notifications',
+        element: <AuthGuard><NotificationSettingsPage /></AuthGuard>,
+      },
+      // The callback reads no search params from React Router and must bypass AuthGuard.
+      { path: 'account/notifications/serverchan/callback', element: <ServerChanCallbackPage /> },
     ],
   },
 

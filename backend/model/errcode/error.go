@@ -31,7 +31,7 @@ var (
 	RedisSetOrKeyNotExits = &Error{500004, http.StatusInternalServerError, "redismember或key不存在"}
 	ServerTurboNoRecord   = &Error{500005, http.StatusInternalServerError, "未查询到ServerTurbo_key值"}
 	SendTimesGT3          = &Error{500006, http.StatusInternalServerError, "发送次数超过3次"}
-	IntervalLT2           = &Error{500007, http.StatusInternalServerError, "时间间隔小于12小时"}
+	IntervalNotReach      = &Error{500007, http.StatusInternalServerError, "时间间隔小于所设定的时间"}
 
 	DependencyUnavailable = &Error{900004, http.StatusServiceUnavailable, "依赖服务不可用"}
 	NotImplemented        = &Error{900005, http.StatusNotImplemented, "功能尚未实现"}

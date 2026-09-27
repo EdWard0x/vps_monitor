@@ -6,11 +6,12 @@ import (
 )
 
 type ReadOptions struct {
-	Stream   string
-	Group    string
-	Consumer string
-	Count    int64
-	Block    time.Duration
+	Stream         string
+	Group          string
+	Consumer       string
+	Count          int64
+	Block          time.Duration
+	NoticeDuration time.Duration
 }
 
 type Delivery struct {

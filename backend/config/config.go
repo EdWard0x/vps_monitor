@@ -63,9 +63,10 @@ type Mail struct {
 	Timeout  time.Duration
 }
 type Worker struct {
-	Enabled   bool
-	ReadCount int64
-	Block     time.Duration
+	Enabled        bool
+	ReadCount      int64
+	Block          time.Duration
+	NoticeDuration time.Duration
 }
 type Logging struct {
 	Level  string
@@ -141,9 +142,11 @@ func Load() (Config, error) {
 			Timeout:  durationSeconds("SMTP_TIMEOUT_SECONDS", 10),
 		},
 		Worker: Worker{
-			Enabled:   boolean("WORKER_ENABLED", false),
-			ReadCount: int64(integer("WORKER_READ_COUNT", 10)),
-			Block:     durationSeconds("WORKER_BLOCK_SECONDS", 5)},
+			Enabled:        boolean("WORKER_ENABLED", false),
+			ReadCount:      int64(integer("WORKER_READ_COUNT", 10)),
+			Block:          durationSeconds("WORKER_BLOCK_SECONDS", 5),
+			NoticeDuration: durationMinutes("NOTICE_DURATION", 10),
+		},
 		Logging: Logging{Level: env("LOG_LEVEL", "info"), Format: env("LOG_FORMAT", "json")},
 	}
 	if err := c.Validate(); err != nil {

@@ -103,6 +103,12 @@ func (c *NoticeConsumer) RecoverPending(ctx context.Context) error {
 					}
 					if err := c.processDelivery(ctx, msg); err != nil {
 						log.Printf("process claimed message id=%s: %v", msg.ID, err)
+						if errors.Is(err, errcode.IntervalNotReach) {
+							if err := c.Acknowledger.Ack(ctx, c.Options, msg.ID); err != nil {
+								log.Printf("pending message ack failed, message id=%s: %v", msg.ID, err)
+							}
+							continue
+						}
 					}
 				}
 				if nextStart == "0-0" {
@@ -195,8 +201,8 @@ func (c *NoticeConsumer) processDelivery(ctx context.Context, delivery messageif
 			if current.SendAt == nil {
 				return fmt.Errorf("通知记录异常：已发送过，但缺少发送时间")
 			}
-			if time.Since(*current.SendAt) < time.Hour*12 {
-				return errcode.IntervalLT2
+			if time.Since(*current.SendAt) < c.Options.NoticeDuration {
+				return errcode.IntervalNotReach
 			}
 		}
 

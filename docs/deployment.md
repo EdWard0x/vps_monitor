@@ -156,6 +156,10 @@ WORKER_ENABLED=false 只禁用循环，当前 main 仍打开连接、创建消�
 | WORKER_ENABLED | false | 调度、普通消费、Pending 清理开关 |
 | WORKER_READ_COUNT | 10 | 每次 XREADGROUP 批量大小 |
 | WORKER_BLOCK_SECONDS | 5 | 阻塞等待新消息时间 |
+| NOTICE_DURATION | 10 | 同一用户、同一 VPS 两次成功通知的最小间隔，单位分钟 |
+| NOTICE_RESET_HOURS | 168 | 距最后一次成功通知达到该小时数后，下次发送恢复 3 次额度；必须为正数且不短于发送间隔 |
+
+通知次数在消费消息时按需重置，无需数据库迁移或定时清零任务。发送成功后保存新次数和时间，失败不更新。持续有货的 VPS 到期后也会再次通知；这不是按缺货、补货变化重置。
 
 整数/布尔配置解析失败会回退默认，不一定启动报错；Validate 仅覆盖部分取值，例如尚未强制 Worker count/block 为正数。不要把成功启动当作所有配置正确的证据。
 

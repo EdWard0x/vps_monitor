@@ -155,7 +155,7 @@ export const NotificationSettingsPage: React.FC = () => {
           <section className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center gap-3"><h2 className="text-base font-bold text-gray-900">全部收藏的库存通知</h2><Badge variant={settings.notice_enabled ? 'green' : 'gray'}>{settings.notice_enabled ? '已开启' : '已关闭'}</Badge></div>
             <Button variant={settings.notice_enabled ? 'outline' : 'primary'} onClick={changeEnabled} loading={busy === 'enable' || busy === 'disable'} disabled={Boolean(busy)}>{settings.notice_enabled ? '关闭微信通知' : '开启微信通知'}</Button>
-            <p className="text-sm text-gray-500 leading-6">每个 VPS 累计最多成功通知三次，两次通知至少间隔十二小时。关闭再开启不会重置发送次数。关闭前已进入发送流程的通知可能仍会送达。</p>
+            <p className="text-sm text-gray-500 leading-6">每个 VPS 每轮最多成功通知三次，两次通知需间隔一段时间。距最后一次成功通知达到重置间隔后，下次通知重新计数；具体间隔由站点配置。关闭再开启不会立即重置发送次数。关闭前已进入发送流程的通知可能仍会送达。</p>
           </section>
         </>
       )}

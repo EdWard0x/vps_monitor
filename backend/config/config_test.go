@@ -12,6 +12,28 @@ func TestFrozenCacheTTLIsPositive(t *testing.T) {
 	}
 }
 
+func TestNoticeIntervals(t *testing.T) {
+	cfg := Config{
+		Application: Application{Mode: "skeleton"},
+		HTTP:        HTTP{CSRFTokenTTL: time.Hour, CSRFCookieName: "vps_csrf"},
+		Redis:       Redis{FrozenCacheTTL: time.Minute},
+		JWT:         JWT{AccessTTL: time.Minute, RefreshTTL: time.Hour},
+		Database:    Database{MaxOpenConns: 1},
+		Worker:      Worker{Enabled: true, NoticeDuration: 10 * time.Minute},
+	}
+	for _, reset := range []time.Duration{0, -time.Hour, time.Minute, 10 * time.Minute, 168 * time.Hour} {
+		cfg.Worker.NoticeResetDuration = reset
+		err := cfg.Validate()
+		if (err == nil) != (reset >= cfg.Worker.NoticeDuration) {
+			t.Errorf("reset interval %v: unexpected validation result %v", reset, err)
+		}
+	}
+	cfg.Worker.NoticeDuration = 0
+	if cfg.Validate() == nil {
+		t.Fatal("zero send interval must be rejected")
+	}
+}
+
 func TestRuntimeRequiresStrongCSRFConfiguration(t *testing.T) {
 	base := Config{Application: Application{Environment: "development", Mode: "runtime"}, HTTP: HTTP{CSRFTokenTTL: time.Hour, CSRFCookieName: "vps_csrf"}, Redis: Redis{Address: "localhost:6379", FrozenCacheTTL: time.Minute}, JWT: JWT{AccessSecret: "0123456789abcdef0123456789abcdef", RefreshSecret: "abcdef0123456789abcdef0123456789", AccessTTL: time.Minute, RefreshTTL: time.Hour}, Database: Database{URL: "postgres://example", MaxOpenConns: 1}}
 	if base.Validate() == nil {

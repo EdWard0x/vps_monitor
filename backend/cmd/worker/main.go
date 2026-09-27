@@ -63,12 +63,13 @@ func main() {
 		Reclaimer:        redisStreamClient,
 	}
 	noticeOption := messageiface.ReadOptions{
-		Stream:         cfg.Redis.NoticeStream,
-		Group:          cfg.Redis.NoticeConsumerGroup,
-		Consumer:       cfg.Redis.NoticeConsumerName,
-		Count:          cfg.Worker.ReadCount,
-		Block:          cfg.Worker.Block,
-		NoticeDuration: cfg.Worker.NoticeDuration,
+		Stream:              cfg.Redis.NoticeStream,
+		Group:               cfg.Redis.NoticeConsumerGroup,
+		Consumer:            cfg.Redis.NoticeConsumerName,
+		Count:               cfg.Worker.ReadCount,
+		Block:               cfg.Worker.Block,
+		NoticeDuration:      cfg.Worker.NoticeDuration,
+		NoticeResetDuration: cfg.Worker.NoticeResetDuration,
 	}
 	noticeConsumer := &task.NoticeConsumer{
 		Enabled:      cfg.Worker.Enabled,

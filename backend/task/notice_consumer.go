@@ -194,16 +194,9 @@ func (c *NoticeConsumer) processDelivery(ctx context.Context, delivery messageif
 			return err
 		}
 
-		if current.SendNoticeTimes >= 3 {
-			return errcode.SendTimesGT3
-		}
-		if current.SendNoticeTimes > 0 {
-			if current.SendAt == nil {
-				return fmt.Errorf("通知记录异常：已发送过，但缺少发送时间")
-			}
-			if time.Since(*current.SendAt) < c.Options.NoticeDuration {
-				return errcode.IntervalNotReach
-			}
+		nextCount, err := c.nextNoticeCount(current, time.Now())
+		if err != nil {
+			return err
 		}
 
 		key := user.ServerTurboKey
@@ -221,7 +214,7 @@ func (c *NoticeConsumer) processDelivery(ctx context.Context, delivery messageif
 		now := time.Now()
 		err = tx.Model(entity.Notice{}).
 			Where("user_id = ? and vps_id = ?", noticeEnabledTask.UserId, noticeEnabledTask.VpsId).
-			Updates(map[string]interface{}{"send_notice_times": gorm.Expr("send_notice_times+?", 1), "send_at": &now}).Error
+			Updates(map[string]interface{}{"send_notice_times": nextCount, "send_at": &now}).Error
 		if err != nil {
 			return err
 		}
@@ -237,6 +230,27 @@ func (c *NoticeConsumer) processDelivery(ctx context.Context, delivery messageif
 		return err
 	}
 	return nil
+}
+
+// 在行锁内计算本次成功发送后的次数；发送失败时不保存重置结果。
+func (c *NoticeConsumer) nextNoticeCount(current entity.Notice, now time.Time) (uint64, error) {
+	count := current.SendNoticeTimes
+	if count > 0 {
+		if current.SendAt == nil {
+			return 0, fmt.Errorf("通知记录异常：已发送过，但缺少发送时间")
+		}
+		elapsed := now.Sub(*current.SendAt)
+		if c.Options.NoticeResetDuration > 0 && elapsed >= c.Options.NoticeResetDuration {
+			count = 0
+		}
+		if count >= 3 {
+			return 0, errcode.SendTimesGT3
+		}
+		if elapsed < c.Options.NoticeDuration {
+			return 0, errcode.IntervalNotReach
+		}
+	}
+	return count + 1, nil
 }
 
 func (c *NoticeConsumer) discard(ctx context.Context, delivery messageiface.Delivery, cause error) error {

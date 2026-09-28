@@ -52,6 +52,7 @@ npm run preview
 | `/account` | 登录后的资料、密码、邮箱设置 |
 | `/account/favorites` | 我的收藏、服务端筛选、排序、分页 |
 | `/account/notifications` | 所有收藏的微信通知设置 |
+| `/account/notifications/guide` | Server 酱 Key 图文绑定说明，登录后访问 |
 | `/account/notifications/serverchan/callback` | 特殊回跳页，自行等待认证恢复，不经过普通 AuthGuard |
 | `/admin` | 管理看板 |
 | `/admin/merchants`、`/admin/vps`、`/admin/vps/:id` | 商家与 VPS 管理 |
@@ -103,6 +104,8 @@ FavoritesProvider 在认证成功后分页读取未筛选收藏，每页 100 条
 | `DELETE /me/delNotice` | 关闭全部收藏通知，无 VPS 参数 |
 
 保存 Key 与开启通知分开操作。写入成功后再 GET 确认状态；开启失败仅业务码 500005 触发未绑定引导，不根据中文错误消息匹配。关闭保留 Key、收藏和发送历史，已经开始发送的请求可能继续完成。
+
+绑定说明页是 React 页面 `src/pages/account/ServerChanGuidePage.tsx`，入口在微信通知设置页。四张操作截图位于 `public/images/serverchan/`，依次展示本站入口、微信扫码登录、生成 AppKey 和返回本站。图片通过 Vite 的 `public` 目录随前端静态资源一起部署，无需新增接口。截图中的二维码和 localhost 地址仅作示例；更新截图前要遮住真实 Key、账号等敏感信息。
 
 `serverchanBinding.ts` 构造外跳链接：Key 占位符位于内层 callback URL。绑定意图只在 sessionStorage 保存 state、userId、创建时间；有效期 15 分钟。回跳 Key 只留内存，通过鉴权 JSON 请求保存。
 

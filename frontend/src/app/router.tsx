@@ -19,6 +19,7 @@ import { PasswordResetPage } from '@/pages/auth/PasswordResetPage';
 import { AccountPage } from '@/pages/account/AccountPage';
 import { FavoritesPage } from '@/pages/account/FavoritesPage';
 import { NotificationSettingsPage } from '@/pages/account/NotificationSettingsPage';
+import { ServerChanGuidePage } from '@/pages/account/ServerChanGuidePage';
 import { ServerChanCallbackPage } from '@/pages/account/ServerChanCallbackPage';
 
 // 管理员后台页面（懒加载）
@@ -102,6 +103,10 @@ export const routes: RouteObject[] = [
       {
         path: 'account/notifications',
         element: <AuthGuard><NotificationSettingsPage /></AuthGuard>,
+      },
+      {
+        path: 'account/notifications/guide',
+        element: <AuthGuard><ServerChanGuidePage /></AuthGuard>,
       },
       // The callback reads no search params from React Router and must bypass AuthGuard.
       { path: 'account/notifications/serverchan/callback', element: <ServerChanCallbackPage /> },

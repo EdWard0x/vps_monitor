@@ -141,6 +141,7 @@ export const NotificationSettingsPage: React.FC = () => {
           <section className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center gap-3"><h2 className="text-base font-bold text-gray-900">Server 酱绑定</h2><Badge variant={settings.key_bound ? 'green' : 'yellow'}>{settings.key_bound ? '已绑定' : '未绑定'}</Badge></div>
             <p className="text-sm text-gray-500">Key 只用于你的微信通知。保存 Key 不会自动开启通知，也不会验证实际送达。</p>
+            <Link to="/account/notifications/guide" className="inline-block text-sm font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800">查看图文绑定说明</Link>
             <div className="flex flex-wrap gap-2">
               <Button onClick={startBinding} disabled={Boolean(busy)}>{settings.key_bound ? '前往 Server 酱更换 Key' : '前往 Server 酱绑定'}</Button>
               <Button variant="outline" disabled={Boolean(busy)} onClick={() => setShowForm((value) => !value)}>{settings.key_bound ? '手动更换 Key' : '手动填写 Key'}</Button>

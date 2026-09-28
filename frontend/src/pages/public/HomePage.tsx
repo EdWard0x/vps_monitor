@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { VPS, VPSSortOption, BillingPeriod } from '@/types/vps';
 import { StockStatus } from '@/types/stock';
@@ -35,6 +35,9 @@ export const HomePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isNotImplemented, setIsNotImplemented] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const pageGenRef = useRef(0);
+  const fetchingRef = useRef(false);
 
   // 加载商家筛选列表
   useEffect(() => {
@@ -44,11 +47,17 @@ export const HomePage: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const fetchVpsList = useCallback(async () => {
+  const fetchVpsList = useCallback(async (background = false) => {
+    if (background && fetchingRef.current) return;
+    const currentGen = ++pageGenRef.current;
+    fetchingRef.current = true;
     try {
-      setLoading(true);
-      setError(null);
-      setIsNotImplemented(false);
+      if (!background) {
+        setLoading(true);
+        setError(null);
+        setIsNotImplemented(false);
+        setRefreshError(null);
+      }
 
       const res = await vpsApi.listVPS({
         page,
@@ -61,21 +70,42 @@ export const HomePage: React.FC = () => {
         sort,
       });
 
+      if (pageGenRef.current !== currentGen) return;
       setVpsList(res.data.items);
       setTotal(res.data.total);
+      setError(null);
+      setIsNotImplemented(false);
+      setRefreshError(null);
     } catch (err: unknown) {
-      if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
+      if (pageGenRef.current !== currentGen) return;
+      if (background) {
+        setRefreshError(err instanceof Error ? err.message : '加载 VPS 套餐失败');
+      } else if (isAppError(err) && (err.code === BusinessCode.NOT_IMPLEMENTED || err.status === 501)) {
         setIsNotImplemented(true);
       } else {
         setError(err instanceof Error ? err.message : '加载 VPS 套餐失败');
       }
     } finally {
-      setLoading(false);
+      if (pageGenRef.current === currentGen) {
+        fetchingRef.current = false;
+        setLoading(false);
+      }
     }
   }, [page, pageSize, sort, q, merchantId, status, currency, billingPeriod]);
 
   useEffect(() => {
     fetchVpsList();
+    const refresh = () => {
+      if (!document.hidden) void fetchVpsList(true);
+    };
+    const interval = setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+      pageGenRef.current++;
+      fetchingRef.current = false;
+    };
   }, [fetchVpsList]);
 
   const handleFilterChange = (patch: Record<string, any>) => {
@@ -119,6 +149,9 @@ export const HomePage: React.FC = () => {
       />
 
       {/* 内容区域 */}
+      {refreshError && (
+        <p role="status" className="text-sm text-amber-700">自动刷新失败，已保留上次数据，将自动重试：{refreshError}</p>
+      )}
       {isNotImplemented ? (
         <NotImplementedCard
           title="VPS 列表接口尚未实现 (HTTP 501)"
@@ -127,7 +160,7 @@ export const HomePage: React.FC = () => {
       ) : loading ? (
         <LoadingSpinner label="正在获取 VPS 套餐列表..." />
       ) : error ? (
-        <ErrorState title="加载失败" description={error} onRetry={fetchVpsList} />
+        <ErrorState title="加载失败" description={error} onRetry={() => fetchVpsList()} />
       ) : vpsList.length === 0 ? (
         <EmptyState
           icon={<Server className="w-6 h-6" />}

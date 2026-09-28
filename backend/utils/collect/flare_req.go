@@ -34,6 +34,8 @@ func (m *MilliTimestamp) UnmarshalJSON(b []byte) error {
 }
 
 func FlareRequest(ctx context.Context, sourceURL string, processorURL string, timeout int, collectName string) (*Falresolverr, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond+time.Second)
+	defer cancel()
 	payload := struct {
 		Cmd        string `json:"cmd"`
 		URL        string `json:"url"`

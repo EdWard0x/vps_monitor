@@ -20,7 +20,7 @@
 
 ## 2. 调度规则
 
-启动立即扫描一次，之后固定每分钟扫描；周期在 main 中写死，没有对应环境变量。首次扫描失败使调度 goroutine 退出；后续周期失败仅记录日志并等待下个周期。
+启动立即扫描一次，库存之后每 5 分钟扫描，通知每 2 分钟扫描；周期在 main 中写死。首次扫描失败使调度 goroutine 退出；后续周期失败仅记录日志并等待下个周期。
 
 目标必须满足：
 
@@ -93,7 +93,7 @@ sequenceDiagram
 
 当前没有生成正库存数量的分支。确认有货时返回 InStock=true、Quantity=nil，写入状态 4；空 Observation 仍表示未知。检查时间更新只说明写入了一个观测，不代表确认了有货/无货。
 
-FlareRequest 向 `FLARE_RESOLVER_URL` POST `{"cmd":"request.get","url":sourceURL,"maxTimeout":...}`。默认地址 `http://localhost:8191/v1`。当前只校验 HTTP 200 与 JSON 能否解析，未校验 JSON status、solution.status 或响应体大小，HTTP Client 没有独立 Timeout；传递 maxTimeout 不等于 Go 客户端拥有网络超时。
+FlareRequest 向 `FLARE_RESOLVER_URL` POST `{"cmd":"request.get","url":sourceURL,"maxTimeout":...}`。默认地址 `http://localhost:8191/v1`。请求 context 在发起 HTTP 请求前设置为 maxTimeout 毫秒加 1 秒，当前 10000 对应 11 秒。当前只校验 HTTP 200 与 JSON 能否解析，未校验 JSON status、solution.status 或响应体大小。
 
 ## 6. 库存事务与消息顺序
 

@@ -45,8 +45,11 @@ export const FavoritesPage: React.FC = () => {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const pageGenRef = useRef(0);
+  const fetchingRef = useRef(false);
+  const previousFavoriteIds = useRef(favoriteIds);
 
   // 加载商家筛选列表
   useEffect(() => {
@@ -56,11 +59,16 @@ export const FavoritesPage: React.FC = () => {
       .catch(() => {});
   }, []);
 
-  const fetchFavoritesList = useCallback(async () => {
+  const fetchFavoritesList = useCallback(async (background = false) => {
+    if (background && fetchingRef.current) return;
     const currentGen = ++pageGenRef.current;
+    fetchingRef.current = true;
     try {
-      setLoading(true);
-      setError(null);
+      if (!background) {
+        setLoading(true);
+        setError(null);
+        setRefreshError(null);
+      }
 
       const res = await favorApi.listFavors({
         page,
@@ -96,11 +104,18 @@ export const FavoritesPage: React.FC = () => {
 
       setVpsList(items);
       setTotal(serverTotal);
+      setError(null);
+      setRefreshError(null);
     } catch (err: unknown) {
       if (pageGenRef.current !== currentGen) return;
-      setError(getErrorMessage(err));
+      if (background) {
+        setRefreshError(getErrorMessage(err));
+      } else {
+        setError(getErrorMessage(err));
+      }
     } finally {
       if (pageGenRef.current === currentGen) {
+        fetchingRef.current = false;
         setLoading(false);
       }
     }
@@ -108,12 +123,24 @@ export const FavoritesPage: React.FC = () => {
 
   useEffect(() => {
     fetchFavoritesList();
+    const refresh = () => {
+      if (!document.hidden) void fetchFavoritesList(true);
+    };
+    const interval = setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+      pageGenRef.current++;
+      fetchingRef.current = false;
+    };
   }, [fetchFavoritesList]);
 
   // 当当前页面渲染的卡片在收藏上下文中被取消时，重新请求列表与 total
   useEffect(() => {
     if (!favoritesLoaded) return;
-    const hasUnfavoritedItem = vpsList.some((vps) => !favoriteIds.has(vps.id));
+    const hasUnfavoritedItem = vpsList.some((vps) => previousFavoriteIds.current.has(vps.id) && !favoriteIds.has(vps.id));
+    previousFavoriteIds.current = favoriteIds;
     if (hasUnfavoritedItem) {
       fetchFavoritesList();
     }
@@ -176,7 +203,7 @@ export const FavoritesPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={fetchFavoritesList}
+              onClick={() => fetchFavoritesList()}
               disabled={loading}
               title="刷新收藏列表"
             >
@@ -202,10 +229,13 @@ export const FavoritesPage: React.FC = () => {
       />
 
       {/* 列表内容 */}
+      {refreshError && (
+        <p role="status" className="text-sm text-amber-700">自动刷新失败，已保留上次数据，将自动重试：{refreshError}</p>
+      )}
       {loading ? (
         <LoadingSpinner label="正在获取收藏列表..." />
       ) : error ? (
-        <ErrorState title="加载收藏失败" description={error} onRetry={fetchFavoritesList} />
+        <ErrorState title="加载收藏失败" description={error} onRetry={() => fetchFavoritesList()} />
       ) : vpsList.length === 0 ? (
         hasFilters ? (
           <EmptyState

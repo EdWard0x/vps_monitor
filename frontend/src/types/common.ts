@@ -1,4 +1,4 @@
-// 通用基础类型定义（对齐 docs/backend.md 与 docs/openapi.yaml）
+// 通用基础类型定义（参照后端 model/response 与 docs/backend.md）
 
 export type ID = string;
 export type Timestamp = string;

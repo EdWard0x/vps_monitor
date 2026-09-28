@@ -78,31 +78,4 @@ describe('HTTP and Error infrastructure tests', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/csrf', expect.objectContaining({ credentials: 'include' }));
   });
 
-  it('cleanupProjectMockServiceWorker only unregisters mockServiceWorker registrations', async () => {
-    const { cleanupProjectMockServiceWorker } = await import('../lib/cleanMockWorker');
-
-    const mockUnregister = vi.fn().mockResolvedValue(true);
-    const otherUnregister = vi.fn().mockResolvedValue(true);
-
-    const mockRegistration = {
-      active: { scriptURL: 'https://example.com/mockServiceWorker.js' },
-      unregister: mockUnregister,
-    };
-    const otherRegistration = {
-      active: { scriptURL: 'https://example.com/sw-pwa.js' },
-      unregister: otherUnregister,
-    };
-
-    vi.stubGlobal('window', {});
-    vi.stubGlobal('navigator', {
-      serviceWorker: {
-        getRegistrations: vi.fn().mockResolvedValue([mockRegistration, otherRegistration]),
-      },
-    });
-
-    await cleanupProjectMockServiceWorker();
-
-    expect(mockUnregister).toHaveBeenCalledTimes(1);
-    expect(otherUnregister).not.toHaveBeenCalled();
-  });
 });

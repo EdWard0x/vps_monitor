@@ -1,175 +1,121 @@
 # VPS Monitor 前端技术文档
 
-核对日期：2026-09-19。本文描述已实现页面和通信行为，接口见 [api.md](api.md)，已知缺口见 [known-issues.md](known-issues.md)。
+按 2026-09-28 仓库源码重建。本文集中维护前端架构、运行方式、业务约束和验证边界；后端与迁移见 [后端技术文档](backend.md)。
 
-## 1. 技术栈与入口
+## 1. 开发与构建
 
-React 18 + TypeScript + Vite 5，React Router 6，Tailwind CSS 3；图标为 lucide-react，类名工具为 clsx/tailwind-merge。项目没有 Redux、Zustand 或 React Query，业务数据主要通过 Context、useState/useEffect/useCallback 管理。
+React 18、TypeScript 5、Vite 5、React Router 6、Tailwind CSS 3；图标使用 lucide-react，测试使用 Vitest。具体安装版本由 `frontend/package-lock.json` 锁定。
 
-`main.tsx` 引入全局 CSS，清理本项目历史 mock Service Worker，然后在 StrictMode 中挂载 App。运行入口没有调用 enableMocking，不会因为配置 `VITE_MOCK_API=true` 就自动切换 mock。`src/mocks`、MSW 依赖和 public/mockServiceWorker.js 仍保留，属于显式预览/测试工具。
+在仓库根目录执行：
 
-Provider 嵌套为 ErrorBoundary → SettingsProvider → AuthProvider → ToastProvider。ErrorBoundary 处理 React 渲染异常，HTTP 错误由请求层和页面处理。
-
-```text
-src/app/          Provider、认证/设置 Context、路由与守卫
-src/api/          以业务模块组织的 HTTP 函数
-src/types/        与后端对应的 TypeScript DTO
-src/lib/http/     fetch、AT、刷新协调、CSRF、AppError
-src/lib/format/   金额、规格、时间、邮箱格式化
-src/pages/        public/auth/account/admin 页面
-src/features/     VPS、商家、用户、账户、认证业务组件
-src/components/   UI 基础件、布局、库存/过期提示
-src/mocks/        显式模拟工具，不在默认运行链路中
-src/test/         Vitest 测试
-```
-
-`@` 映射 src。构建脚本是 `tsc --noEmit && vite build`，产物 dist。开发端口 5173，`/api` 代理至 `http://127.0.0.1:8080`。
-
-## 2. 页面、路由与接口
-
-| 浏览器路径 | 页面 | 主要 API/行为 |
-| --- | --- | --- |
-| `/` | HomePage | `/vps/list`、`/merchant/list`，URL 筛选/分页 |
-| `/merchants` | MerchantsPage | 公开商家列表 |
-| `/merchants/:id` | MerchantDetailPage | 商家详情及关联 VPS |
-| `/vps/:id` | VpsDetailPage | 首次详情，后续 `/stock/info` 轮询 |
-| `/login` | LoginPage | 登录、内部 returnTo 跳转 |
-| `/register` | RegisterPage | 注册，受公开设置提示和后端开关限制 |
-| `/reset-password` | PasswordResetPage | 申请/确认找回验证码 |
-| `/forgot-password` | 跳转 | 重定向 `/reset-password` |
-| `/account` | AccountPage | 资料、改密、邮箱绑定/换绑 |
-| `/admin` | AdminDashboardPage | 管理看板 |
-| `/admin/merchants` | AdminMerchantsPage | 商家增删改查、两类开关 |
-| `/admin/vps` | AdminVpsPage | 套餐增删改查、筛选 |
-| `/admin/vps/:id` | AdminVpsDetailPage | 完整套餐编辑、采集条件说明 |
-| `/admin/users` | AdminUsersPage | 用户、角色、密码重置、冻结/解冻 |
-| `/admin/settings` | AdminSettingsPage | 站点、注册、采集设置 |
-| `/403`、其他未匹配路径 | ErrorPages | 无权限 / 404 |
-
-公开和账户页使用 AppLayout，管理页使用 AdminLayout。后台页面 lazy import + Suspense，公开页面静态导入。Router 使用浏览器 history；无 document 的测试环境使用 memory router。生产 Nginx `try_files ... /index.html` 支持直接访问深层路径。
-
-### 守卫
-
-- AuthGuard：loading 时等待；anonymous 转 `/login?returnTo=...`；unavailable 展示错误。
-- AdminGuard：在认证基础上要求 admin；邮箱未验证或 mail_required 时提示前往个人中心。
-- GuestGuard：已登录时跳首页，用于登录/注册/找回页。
-
-守卫只控制界面，真正权限仍由后端鉴权。前端账户快照不会主动订阅服务器角色变化，后续请求错误或资料刷新才同步。
-
-## 3. HTTP 层
-
-`lib/http/client.ts` 的 apiRequest/apiClient 是统一入口，业务 API 模块负责 URL、query 和 body。默认 `VITE_API_BASE_URL || '/api/v1'`，带 credentials=include；AT 有值时加入 Authorization。
-
-默认请求超时 15 秒，AbortController 控制 fetch；网络失败转 AppError(status=0)，abort 转 408。成功要求 HTTP 2xx、JSON 可解析、code=0，返回完整 Envelope，而不是直接 data。
-
-```ts
-type ID = string;
-type Timestamp = string;
-interface Envelope<T> {
-  code: number;
-  message: string;
-  data: T;
-  request_id: string;
-}
-interface Page<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-```
-
-IDs 不转 Number；价格保留字符串，formatPrice 直接拼接币种/金额/周期，不经过浮点计算。时间按日期工具转换为用户本地显示。列表默认 20、服务端最大 100，空 items=[]。
-
-### 自动恢复与错误
-
-| 条件 | 当前请求层动作 |
-| --- | --- |
-| 401 + 200003 ACCESS_EXPIRED | 合并并发 refresh，成功后仅重试原请求一次 |
-| 200005 USER_FROZEN | 清 AT，广播本页冻结事件 |
-| 200017 TOKEN_REVOKED / 200009 INVALID_TOKEN | 清 AT，通知凭据失效 |
-| 其他 401 | 清 AT，通知未登录 |
-| 403 + 100004 CSRF_REJECTED | 清内存 CSRF；当前失败请求不自动重放 |
-| 501 | 映射未实现状态；页面通常显示专门提示 |
-| 其他错误 | AppError 包含 status/code/message/requestId/errors |
-
-AppError 的字段错误扩展目前与后端类型存在差异，且后端未实际填充该数组，见已知问题。
-
-## 4. 登录状态与多标签
-
-AT 是 `token.ts` 模块内变量，不写 localStorage/sessionStorage；RT 是浏览器自动携带的 HttpOnly Cookie。CSRF 也缓存于内存，从 GET 响应取值，不能读 Cookie。
-
-启动：loading → ensureCsrfToken → requestTokenRefresh → 成功则 `/me/info` → authenticated，否则通常 anonymous。AuthStatus 定义 loading/anonymous/authenticated/unavailable；但当前 refresh 辅助方法将所有失败压为 null，因此不是所有 501/503 都能进入 unavailable。
-
-登录归一化用户名，保存返回 AT 与 user。注册成功不自动登录。登出尝试 API 后总会清本地状态；网络失败被忽略，浏览器 RT 可能仍在，后续刷新页面可能恢复身份。
-
-刷新在同标签用共享 Promise 合并，在支持 Web Locks 的浏览器跨标签串行执行；BroadcastChannel `vps_auth_channel` 同步 AT/LOGOUT。当前锁内仍直接执行刷新，没有复用其他标签新 AT 的判断；收到广播也只更新 token 模块，未同步 React user/status。
-
-**自定义 API 地址注意：** 普通 apiRequest 使用 VITE_API_BASE_URL，但 AuthContext 初始化调用 ensureCsrfToken/requestTokenRefresh 未传此地址，使用默认 `/api/v1`。当前最可靠的配置是同源 `/api/v1`，直连其他域名需要先统一这些调用。
-
-## 5. 公开页面数据流
-
-HomePage 从 URLSearchParams 读取 q、merchant_id、status、currency、billing_period、sort、page，固定 page_size=20；筛选变更重置第一页，路由变化重新请求。没有列表定时轮询，也没有通用请求缓存。商家筛选目前只取前 100 条，失败被忽略。
-
-初次加载、无数据、请求错误、未实现是独立界面状态。API 失败不回退到 mock 套餐。SettingsContext 是例外：设置失败保留默认站点名和 registration_enabled=true，并另存 error；不能将这当作服务端注册已开启。
-
-## 6. 库存展示与轮询
-
-类型见 `types/stock.ts`，服务器返回三态，stale 是独立维度：
-
-| 数据 | 展示原则 |
-| --- | --- |
-| status=1，quantity 非空 | 有货及剩余数量 |
-| status=1，quantity=null | 有货，不编造数量 |
-| status=2 | 暂时无货 |
-| status=3，有检查时间 | 库存未知 |
-| 没有检查时间 | 尚未获得采集结果 |
-| is_stale=true | 保留状态，额外显示数据可能已过期 |
-| 请求失败 | 错误状态，不等于库存未知 |
-
-StockBadge、StaleAlert、VpsDetailCard/VpsCard 负责复用展示。公开 DTO 不含 collection_enabled、delivery_id、consumer 等管理/消息字段。
-
-VpsDetailPage 初始 GET `/vps/info?id=...`，使用内嵌 stock；取得 VPS 后每 30 秒 GET `/stock/info?vps_id=...`。隐藏时跳过，重新可见立即刷新；isFetching 防重叠，cleanup 置 cancelled、清定时器和事件监听，忽略迟到的轮询结果。失败保留上次库存，显示非阻塞提示。
-
-该取消保护目前仅覆盖轮询；首次详情请求没有取消/过期响应保护，ID 快速切换仍可能发生竞态。后台详情当前使用 adminGetVPS 里的库存，不走公开 stock 轮询，以免公开隐藏资源返回 404。
-
-## 7. 管理页面与表单
-
-### 商家和套餐
-
-MerchantFormDialog 分开提交 enabled 和 collection_enabled，编辑不能改商家 code。商家删除冲突应以服务端返回为准。
-
-VpsFormDialog/AdminVpsDetailPage 编辑完整 VPSEditable；明细页可改商家和套餐 code。管理商家选项按每页 100 循环读取，以涵盖停用项。空 transfer/port 转 null，0 保留；IP 开关关闭把数量置 0。若为空或过小，部分数值输入在提交前用 Math.max/default 归一化，不能假定所有非法输入都以错误提示拒绝。
-
-前端 disk_type 类型/选项为 ssd/nvme/hdd/unknown，后端接受任意合法短字符串；外部客户端录入其他类型时需要注意兼容。
-
-### 设置和采集许可
-
-设置 GET 返回嵌套结构，PUT 发送平铺可选字段 site_name/registration_enabled/collection_enabled，不回传 collector_implemented。
-
-能力标记 true 仅说明代码提供采集实现。实际需要 Worker 开启、支持该商家、三级开关及 enabled 满足、解析服务可达。界面只能说明“允许采集”，没有证据显示“Worker 在线”或“正在执行”。
-
-后台详情会读取管理设置和当前商家，计算条件文案。但当前这些请求失败后缺少完整未知态，且文案依据未提交表单值；因此条件说明可能比实际已保存配置更乐观，详见已知问题。上级开关关闭不自动修改下级开关值。
-
-### 账户与用户
-
-AccountPage 组合 ProfileSection、PasswordChangeSection、MailBindingSection。验证码冷却由响应 retry_after 驱动；绑定/换绑区分 current_password。找回页面分申请 reset_id 与确认两步，202 文案保持中性。
-
-AdminUsersPage 组合筛选、表格、资料/角色/重置密码/冻结对话框。冻结返回 cache_synced=false 时需提示缓存尚未同步，不能将解冻与重置密码合并。新增、编辑后重新读取服务端数据，不以静态文件保存真实业务输入。
-
-## 8. 开发、测试与维护
-
-```powershell
+```bash
 cd frontend
 npm ci
 npm run dev
+```
+
+开发地址为 `http://localhost:5173`，Vite 把 `/api` 代理至 `http://127.0.0.1:8080`。启动真实后端后使用，无演示账号、Mock 数据服务或 MSW。环境变量模板为 `frontend/.env.example`。
+
+```bash
 npm run typecheck
 npm test
 npm run build
+npm run preview
 ```
 
-npm ci 依据 package-lock.json 安装；VITE_* 在构建时注入，修改运行容器环境不重写已生成静态 JS。不要将服务端密钥写入 VITE_*。
+`build` 先运行 TypeScript 检查，再输出 `dist/`。`preview` 仅用于检查构建产物，不替代生产 Nginx；其 API 转发需要单独配置。
 
-新增字段需要同时核对后端 response/request、OpenAPI、types、api、表单和展示。复用 lib/http，页面不另写认证刷新。需要覆盖异步竞态时采用实际生命周期测试，不仅做静态渲染断言。
+`VITE_API_BASE_URL` 是构建期配置，普通 HTTP 客户端默认 `/api/v1`。当前 AuthContext 初始化调用 CSRF/refresh 时仍使用默认路径，所以推荐同源 `/api/v1` 部署；修改普通客户端变量并不能保证跨域认证全链路同步切换。
 
-本次 6 个测试文件、40 个测试通过，TypeScript 与 Vite 生产构建通过；静态渲染测试含 React useLayoutEffect 警告。现有测试不等价于真实浏览器登录、Cookie、邮箱或 Worker 联调验收。
+## 2. 目录与启动顺序
+
+| 位置 | 职责 |
+| --- | --- |
+| `src/main.tsx` | 先提取并清理 Server 酱回跳 URL，再动态加载 bootstrap |
+| `src/bootstrap.tsx`、`App.tsx` | 样式、React StrictMode、应用挂载 |
+| `src/app/` | 路由、守卫、认证、设置、收藏 Context、错误边界 |
+| `src/pages/` | public、auth、account、admin 页面 |
+| `src/features/` | 业务表单、表格、卡片、收藏按钮 |
+| `src/components/` | 布局与 UI 基础组件 |
+| `src/api/`、`src/types/` | HTTP 方法和 TypeScript 契约 |
+| `src/lib/` | HTTP、格式化、微信绑定与通知操作 |
+| `src/test/` | 单元、静态组件渲染、请求契约测试 |
+
+`@/` 指向 `src/`。业务模块直接从文件导入。Provider 顺序为 ErrorBoundary → SettingsProvider → AuthProvider → ToastProvider → FavoritesProvider。新增用户状态应注意账号切换清理及旧响应失效。
+
+## 3. 页面与权限
+
+| 路径 | 功能 / 访问要求 |
+| --- | --- |
+| `/`、`/merchants`、`/merchants/:id`、`/vps/:id` | 公开目录、商家和产品详情 |
+| `/login`、`/register`、`/reset-password` | 游客认证页；`/forgot-password` 重定向至找回密码 |
+| `/account` | 登录后的资料、密码、邮箱设置 |
+| `/account/favorites` | 我的收藏、服务端筛选、排序、分页 |
+| `/account/notifications` | 所有收藏的微信通知设置 |
+| `/account/notifications/serverchan/callback` | 特殊回跳页，自行等待认证恢复，不经过普通 AuthGuard |
+| `/admin` | 管理看板 |
+| `/admin/merchants`、`/admin/vps`、`/admin/vps/:id` | 商家与 VPS 管理 |
+| `/admin/users`、`/admin/settings` | 用户管理与站点设置 |
+| `/403`、其他未知路径 | 无权限、404 |
+
+前台共用 AppLayout，后台共用 AdminLayout。后台页面 lazy import + Suspense。AuthGuard 处理认证恢复及登录跳转；AdminGuard 检查管理员与邮箱条件。实际授权由后端完成，前端路由守卫不能代替后端鉴权。
+
+## 4. HTTP 与认证
+
+`lib/http/client.ts` 统一处理请求：携带 Cookie、注入内存 Access Token、默认 15 秒超时、解析响应信封、认证失败事件与刷新重试。业务成功要求 HTTP 成功且 `code === 0`。错误使用 AppError，保留 HTTP 状态、业务码、request_id 和字段错误。
+
+响应通常为 `{ code, message, data, request_id }`；分页 data 为 `{ items, total, page, page_size }`。ID 按字符串传递，金额也是字符串，不要先把 ID 转成 JavaScript number。库存数量 null 与 0 含义不同。
+
+Access Token 仅在内存；Refresh Token 由后端 HttpOnly Cookie 保存。启动先获取 CSRF，再刷新 Token，随后读取 `/me/info`。登录、注册、刷新、退出、找回密码写请求由客户端附加 CSRF 头。后端业务 `/me` 接口依赖 Bearer 鉴权，不要自行假设所有写接口都要求同一种 CSRF 处理。
+
+新增接口依次更新 `types`、`api`、调用页面与本文相关接口说明。优先显示服务端错误消息；目前前端 `DATABASE_ERROR` 常量仍为 400001，而后端数据库错误为 500001，尚未统一，不应据旧数值判断业务成功。
+
+## 5. 收藏与库存
+
+收藏写接口：`POST /me/addFavor?vpsId=...`、`DELETE /me/delFavor?vpsId=...`；列表是 `GET /me/listFavors`，返回公开 VPS 分页对象。参数名是 query 中的 `vpsId`。写成功 data 为字符串 `success`。
+
+FavoritesProvider 在认证成功后分页读取未筛选收藏，每页 100 条，建立共享 ID Set；当前循环最多读取 100 页。用用户 ID、请求代次和变更覆盖信息处理迟到响应；同一 VPS 的在途写请求共享。未登录隐藏星星；首次状态尚未确定时显示等待状态，读取失败可重试。账号切换会清理旧收藏。
+
+个人收藏页的筛选数据与全局标星集合分开管理。支持关键词、商家、币种、周期、库存、价格/更新时间排序；价格按原金额比较，不换汇、不折算周期。跨设备变更、分页过程中产品变更及超过当前分页上限仍需进一步验证，不能承诺严格一致的全量快照。
+
+| 库存 status | 含义 |
+| --- | --- |
+| 1 | 有货，通常有数量；兼容数量为空的旧数据 |
+| 2 | 无货 |
+| 3 | 未知或尚无结果 |
+| 4 | 已确认有货，数量未知 |
+
+有货筛选 `status=1` 包括 1、4。`quantity=null` 不能显示成 0。无库存记录、超过 15 分钟未更新会被后端标为过期；`last_checked_at` 是最近写入观测的时间。
+
+首页与收藏页每 30 秒刷新当前列表，公开产品详情每 30 秒查询库存；隐藏时暂停、恢复可见时刷新，后台请求失败保留已有内容并提示。商家详情目前没有同等列表轮询。公开产品详情的首次读取仍需关注快速切换 ID 的迟到响应边界。
+
+`enabled` 控制公开可见性；全局、商家、VPS 的 `collection_enabled` 是三层采集许可。`collector_implemented=true` 仅表示有代码实现，不代表 Worker 在线或目标商家受支持。
+
+## 6. 微信通知与敏感回跳
+
+通知设置接口：
+
+| 请求 | 用途 |
+| --- | --- |
+| `GET /me/notice` | 返回 `key_bound`、`notice_enabled` |
+| `PUT /me/notice/server-key` | JSON `{ send_key }` 保存 Key，不回传完整 Key |
+| `POST /me/addNotice` | 开启全部收藏通知，无 VPS 参数 |
+| `DELETE /me/delNotice` | 关闭全部收藏通知，无 VPS 参数 |
+
+保存 Key 与开启通知分开操作。写入成功后再 GET 确认状态；开启失败仅业务码 500005 触发未绑定引导，不根据中文错误消息匹配。关闭保留 Key、收藏和发送历史，已经开始发送的请求可能继续完成。
+
+`serverchanBinding.ts` 构造外跳链接：Key 占位符位于内层 callback URL。绑定意图只在 sessionStorage 保存 state、userId、创建时间；有效期 15 分钟。回跳 Key 只留内存，通过鉴权 JSON 请求保存。
+
+必须保留 `main.tsx` 的早期 URL 清理顺序，不能把 Key 放进登录 returnTo、localStorage 或 sessionStorage。回跳页处理 state/账号不匹配、重复参数、过期和重试。重复 effect 共享在途保存 Promise，避免重复绑定。
+
+`index.html` 设置 Referrer 策略，Nginx 有回跳路径保护。外层反向代理也应禁止记录该路径的查询参数；SPA 内部重定向和实际访问日志需在部署环境检查。前端测试不代表第三方扫码或微信真实送达已经验收。
+
+## 7. 生产与验证边界
+
+本次重构版对应全新数据库基线 `001_baseline`，不承接旧 main 的数据结构。后续涉及表结构与接口的功能，应先验证后端增量迁移保留已有数据，再发布匹配前端；前端不执行建表或数据迁移。具体步骤见 [后端文档](backend.md)。
+
+前端 Dockerfile 使用 Node 构建，再由 Nginx 提供静态资源、SPA 深链接及 `/api/` 代理；入口编排是根目录 `docker-compose.vps.yaml`。Vite 环境变量在镜像构建时写入，运行容器时修改变量不会重写已有 JS。
+
+应用已移除浏览器 Mock 与 MSW 依赖。曾在旧开发版本注册过 Service Worker 的浏览器，升级时可在开发者工具 Application → Service Workers 中注销对应旧注册并刷新；这属于浏览器本地状态清理。
+
+本次清理验证：TypeScript 检查、8 个测试文件共 53 项测试、生产构建通过。测试保留格式化、HTTP 错误、请求参数、通知回跳及组件展示等检查；网络用例仅在测试内部替换 fetch，不提供模拟业务后端。静态渲染存在 React Router 的 useLayoutEffect 警告，不等于测试失败。尚未在本次工作中进行真实浏览器全流程、SMTP、扫码和微信送达验收。

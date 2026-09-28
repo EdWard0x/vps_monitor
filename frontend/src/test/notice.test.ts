@@ -1,6 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { http, HttpResponse } from 'msw';
-import { setupServer } from 'msw/node';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as noticeApi from '../api/notice';
 import { AppError } from '../lib/http/errors';
 import { changeAndConfirmNotice, isMissingServerKey, saveAndConfirmKey } from '../lib/noticeActions';
@@ -13,8 +11,7 @@ import {
   validateCapturedCallback,
 } from '../lib/serverchanBinding';
 
-const server = setupServer();
-const ok = (data: unknown) => HttpResponse.json({ code: 0, message: 'ok', data, request_id: 'test' });
+const ok = (data: unknown) => Response.json({ code: 0, message: 'ok', data, request_id: 'test' });
 
 function memoryStorage() {
   const items = new Map<string, string>();
@@ -26,13 +23,10 @@ function memoryStorage() {
 }
 
 describe('微信通知前端契约', () => {
-  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   afterEach(() => {
-    server.resetHandlers();
     clearCapturedCallback();
     vi.unstubAllGlobals();
   });
-  afterAll(() => server.close());
 
   it('puts the literal Key placeholder in the inner callback URL once', () => {
     const target = new URL(makeServerChanUrl('https://current.example', 'random state'));
@@ -68,11 +62,14 @@ describe('微信通知前端契约', () => {
     captureServerChanCallback({ href: `https://current.example${CALLBACK_PATH}?key=actual-key&state=nonce` }, { state: null, replaceState: vi.fn() });
     expect(storage.getItem('serverchan.bind.intent')).not.toContain('actual-key');
     let puts = 0;
-    server.use(http.put('*/api/v1/me/notice/server-key', async ({ request }) => {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const request = new Request(url, init);
+      expect(request.method).toBe('PUT');
+      expect(new URL(url).pathname).toBe('/api/v1/me/notice/server-key');
       puts++;
       expect(await request.json()).toEqual({ send_key: 'actual-key' });
       return ok({ key_bound: true, notice_enabled: false });
-    }));
+    });
     await Promise.all([saveCapturedCallback(), saveCapturedCallback()]);
     expect(puts).toBe(1);
     expect(storage.getItem('serverchan.bind.intent')).toBeNull();
@@ -84,13 +81,16 @@ describe('微信通知前端契约', () => {
     storage.setItem('serverchan.bind.intent', JSON.stringify({ state: 'nonce', userId: 'user-1', createdAt: Date.now() }));
     captureServerChanCallback({ href: `https://current.example${CALLBACK_PATH}?key=retry-key&state=nonce` }, { state: null, replaceState: vi.fn() });
     let attempts = 0;
-    server.use(http.put('*/api/v1/me/notice/server-key', async ({ request }) => {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const request = new Request(url, init);
+      expect(request.method).toBe('PUT');
+      expect(new URL(url).pathname).toBe('/api/v1/me/notice/server-key');
       attempts++;
       expect(await request.json()).toEqual({ send_key: 'retry-key' });
       return attempts === 1
-        ? HttpResponse.json({ code: 900001, message: 'failed', data: null }, { status: 500 })
+        ? Response.json({ code: 900001, message: 'failed', data: null }, { status: 500 })
         : ok({ key_bound: true, notice_enabled: false });
-    }));
+    });
     await expect(saveCapturedCallback()).rejects.toMatchObject({ code: 900001 });
     expect(validateCapturedCallback('user-1', storage)).toBe(true);
     await expect(saveCapturedCallback()).resolves.toBeUndefined();
@@ -101,16 +101,24 @@ describe('微信通知前端契约', () => {
   it('saves Key separately from enabling and confirms state from GET', async () => {
     const calls: string[] = [];
     let settings = { key_bound: false, notice_enabled: false };
-    server.use(
-      http.put('*/api/v1/me/notice/server-key', async ({ request }) => {
-        calls.push('PUT');
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const request = new Request(url, init);
+      calls.push(request.method);
+      if (request.method === 'PUT') {
+        expect(new URL(url).pathname).toBe('/api/v1/me/notice/server-key');
         expect(await request.json()).toEqual({ send_key: 'real-key' });
         settings = { ...settings, key_bound: true };
         return ok(settings);
-      }),
-      http.get('*/api/v1/me/notice', () => { calls.push('GET'); return ok(settings); }),
-      http.post('*/api/v1/me/addNotice', () => { calls.push('POST'); settings = { ...settings, notice_enabled: true }; return ok('success'); }),
-    );
+      }
+      if (request.method === 'POST') {
+        expect(new URL(url).pathname).toBe('/api/v1/me/addNotice');
+        settings = { ...settings, notice_enabled: true };
+        return ok('success');
+      }
+      expect(request.method).toBe('GET');
+      expect(new URL(url).pathname).toBe('/api/v1/me/notice');
+      return ok(settings);
+    });
     expect(await saveAndConfirmKey('real-key')).toEqual({ key_bound: true, notice_enabled: false });
     expect(calls).toEqual(['PUT', 'GET']);
     expect(await changeAndConfirmNotice(true)).toEqual({ key_bound: true, notice_enabled: true });
@@ -119,17 +127,19 @@ describe('微信通知前端契约', () => {
 
   it('closes globally without vpsId and rejects an unconfirmed state', async () => {
     let settings = { key_bound: true, notice_enabled: true };
-    server.use(
-      http.delete('*/api/v1/me/delNotice', async ({ request }) => {
-        const url = new URL(request.url);
+    vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      if (request.method === 'DELETE') {
         expect(url.pathname).toBe('/api/v1/me/delNotice');
         expect(url.search).toBe('');
-        expect(request.method).toBe('DELETE');
         expect(await request.text()).toBe('');
         return ok('success');
-      }),
-      http.get('*/api/v1/me/notice', () => ok(settings)),
-    );
+      }
+      expect(request.method).toBe('GET');
+      expect(url.pathname).toBe('/api/v1/me/notice');
+      return ok(settings);
+    });
     await expect(changeAndConfirmNotice(false)).rejects.toThrow('开关状态未确认');
     settings = { ...settings, notice_enabled: false };
     await expect(changeAndConfirmNotice(false)).resolves.toEqual(settings);
@@ -138,16 +148,16 @@ describe('微信通知前端契约', () => {
   it('uses only business code 500005 for unbound guidance; other failures remain failures', async () => {
     expect(isMissingServerKey(new AppError(500, 500005, 'any message'))).toBe(true);
     expect(isMissingServerKey(new AppError(500, 900001, '未查询到ServerTurbo_key值'))).toBe(false);
-    server.use(http.post('*/api/v1/me/addNotice', () => HttpResponse.json({ code: 900001, message: 'failed', data: null }, { status: 500 })));
+    vi.stubGlobal('fetch', async () => Response.json({ code: 900001, message: 'failed', data: null }, { status: 500 }));
     await expect(changeAndConfirmNotice(true)).rejects.toMatchObject({ code: 900001 });
-    server.use(http.put('*/api/v1/me/notice/server-key', () => HttpResponse.json({ code: 900001, message: 'failed', data: null }, { status: 500 })));
+    vi.stubGlobal('fetch', async () => Response.json({ code: 900001, message: 'failed', data: null }, { status: 500 }));
     await expect(saveAndConfirmKey('real-key')).rejects.toMatchObject({ code: 900001 });
-    server.use(http.get('*/api/v1/me/notice', () => HttpResponse.json({ code: 900001, message: 'failed', data: null }, { status: 500 })));
+    vi.stubGlobal('fetch', async () => Response.json({ code: 900001, message: 'failed', data: null }, { status: 500 }));
     await expect(noticeApi.getNotice()).rejects.toMatchObject({ code: 900001 });
   });
 
   it('rejects a mismatched settings payload instead of displaying a fabricated status', async () => {
-    server.use(http.get('*/api/v1/me/notice', () => ok('success')));
+    vi.stubGlobal('fetch', async () => ok('success'));
     await expect(noticeApi.getNotice()).rejects.toThrow('响应格式不符');
   });
 });

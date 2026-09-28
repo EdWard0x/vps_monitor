@@ -1,3 +1,4 @@
+-- Fresh-deployment baseline. After release, append migrations. Never edit this file.
 CREATE TABLE users (
     id bigserial PRIMARY KEY,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -11,6 +12,8 @@ CREATE TABLE users (
     mail_verified boolean NOT NULL DEFAULT false,
     mail_verified_at timestamptz,
     token_version bigint NOT NULL DEFAULT 1,
+    notice_enabled boolean NOT NULL DEFAULT false,
+    server_turbo_key varchar(64) NOT NULL DEFAULT '',
     CONSTRAINT ck_users_role CHECK (role IN ('user', 'admin')),
     CONSTRAINT ck_users_token_version CHECK (token_version > 0),
     CONSTRAINT ck_users_mail_verified CHECK (
@@ -83,6 +86,7 @@ CREATE TABLE vps_detail (
     purchase_url text NOT NULL,
     enabled boolean NOT NULL DEFAULT true,
     collection_enabled boolean NOT NULL DEFAULT false,
+    has_stock boolean NOT NULL DEFAULT false,
     CONSTRAINT fk_vps_merchant FOREIGN KEY (merchant_id) REFERENCES merchant(id) ON DELETE RESTRICT,
     CONSTRAINT uq_vps_merchant_code UNIQUE (merchant_id, code),
     CONSTRAINT ck_vps_cpu CHECK (cpu_cores > 0),
@@ -119,7 +123,7 @@ CREATE TABLE vps_stocks (
     last_in_stock_at timestamptz,
     delivery_id varchar(64) NOT NULL,
     CONSTRAINT fk_stock_vps FOREIGN KEY (vps_id) REFERENCES vps_detail(id) ON DELETE RESTRICT,
-    CONSTRAINT ck_stock_status CHECK (status IN (1, 2, 3)),
+    CONSTRAINT ck_stock_status CHECK (status IN (1, 2, 3, 4)),
     CONSTRAINT ck_stock_quantity CHECK (quantity IS NULL OR quantity >= 0),
     CONSTRAINT ck_stock_delivery_id CHECK (delivery_id ~ '^[0-9]+-[0-9]+$')
 );
@@ -194,3 +198,30 @@ CREATE INDEX idx_password_reset_expiry ON password_reset_requests (expires_at) W
 -- migrate:split
 INSERT INTO site_settings (site_name, registration_enabled, collection_enabled)
 VALUES ('VPS Monitor', false, false);
+
+-- migrate:split
+CREATE TABLE notices (
+    id bigserial PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    deleted_at timestamptz,
+    user_id bigint NOT NULL,
+    vps_id bigint NOT NULL,
+    merchant_id bigint NOT NULL,
+    send_notice_times bigint NOT NULL DEFAULT 0,
+    send_at timestamptz,
+    CONSTRAINT fk_notices_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_notices_vps FOREIGN KEY (vps_id) REFERENCES vps_detail(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_notices_merchant FOREIGN KEY (merchant_id) REFERENCES merchant(id) ON DELETE RESTRICT,
+    CONSTRAINT uniq_notice_user_vps UNIQUE (user_id, vps_id),
+    CONSTRAINT ck_notices_send_times CHECK (send_notice_times >= 0)
+);
+
+-- migrate:split
+CREATE INDEX idx_notices_deleted_at ON notices (deleted_at);
+
+-- migrate:split
+CREATE INDEX idx_notices_vps_id ON notices (vps_id);
+
+-- migrate:split
+CREATE INDEX idx_notices_merchant_id ON notices (merchant_id);

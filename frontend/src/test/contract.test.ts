@@ -11,7 +11,7 @@ import * as dashboardApi from '../api/dashboard';
 import { BusinessCode, BusinessCodeMessages } from '../types/error';
 import { routes } from '../app/router';
 
-describe('Frontend Refactor Skeleton Contract Tests', () => {
+describe('Frontend Contract Tests', () => {
   it('API modules export all required interface methods according to contract', () => {
     // Auth endpoints
     expect(typeof authApi.issueCSRF).toBe('function');

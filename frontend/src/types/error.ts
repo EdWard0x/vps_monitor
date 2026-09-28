@@ -1,4 +1,4 @@
-// 业务错误码定义（与当前后端 model/errcode 和 docs/openapi.yaml 保持一致）
+// 业务错误码定义（参照后端 model/errcode；历史差异见 docs/frontend.md）
 
 export const BusinessCode = {
   OK: 0,

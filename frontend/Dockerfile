@@ -8,9 +8,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY . .
 ARG VITE_API_BASE_URL=/api/v1
-ARG VITE_MOCK_API=false
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
-    VITE_MOCK_API=$VITE_MOCK_API
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 FROM nginx:1.28-alpine AS runtime

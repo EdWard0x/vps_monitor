@@ -1,187 +1,259 @@
 # VPS Monitor 后端技术文档
 
-本文以 2026-09-19 工作区实现为准。接口见 [api.md](api.md)，Worker 见 [collection.md](collection.md)，运行参数见 [deployment.md](deployment.md)。
+按 2026-09-28 仓库源码重建，涵盖开发、业务、采集、部署与数据库迁移。前端见 [前端技术文档](frontend.md)。本文描述仓库实现，本次未连接已部署实例核对数据库状态。
 
-## 1. 进程与装配
+## 1. 架构与数据归属
 
-| 入口 | 职责 | 关键说明 |
-| --- | --- | --- |
-| `cmd/api` | HTTP 服务 | `config.Load → initialize.New → App.Run`，处理退出信号 |
-| `cmd/worker` | 调度、消费、Pending 清理 | 独立打开数据库和 Redis，注册 dmit、akko 采集器 |
-| `cmd/migrate` | up/down/status 迁移 | 显式执行，普通 API 启动不调用 |
-| `cmd/admin` | 创建候选人、提升角色 | 普通账号真实验证邮箱后再提升 |
-| `cmd/seed` | 保留入口 | RunSeed 返回 NotImplemented，不生成演示数据 |
+Go 1.25、Gin、GORM、PostgreSQL、go-redis/v9。生产编排使用 PostgreSQL 17、Redis 8。系统管理商家套餐、库存观测、收藏和补货通知，不采集 VPS 主机 CPU/内存指标。
 
-`config.Load()` 从当前工作目录可选加载 `.env`，映射环境变量并校验。正常使用 `APP_MODE=runtime`，API 在此模式连接 PostgreSQL 与 Redis，连接失败阻止启动。skeleton 模式不建立这些连接，数据库业务主要返回 501；CSRF 等不依赖数据库的能力仍可工作。Worker 没有对应的无依赖分支，不能以 skeleton 演练采集。
+| 位置 | 职责 |
+| --- | --- |
+| `cmd/api` | HTTP 服务 |
+| `cmd/worker` | 采集/通知调度、消费和 Pending 处理 |
+| `cmd/migrate` | 显式数据库版本迁移 |
+| `cmd/admin` | 首个用户创建和管理员提升 |
+| `config`、`initialize` | 环境变量、日志、数据库/Redis 与依赖装配 |
+| `router`、`api`、`middle` | 路由、参数绑定、统一响应、认证/权限/CSRF/限流 |
+| `service` | 业务规则、数据库事务、收藏与通知设置 |
+| `model` | 数据实体、请求、响应、内部消息、错误码 |
+| `iface`、`utils` | 可替换能力契约与 JWT/邮件/采集/Redis 等实现 |
+| `task` | 调度器及消费者 |
+| `migrations` | 不可改写的已发布 SQL 历史 |
+| `test`、各包 `*_test.go` | 无依赖与外部服务集成测试 |
 
-`initialize.BuildServices` 显式注入数据库、冻结缓存、JWT、密码、CSRF、SMTP。API 关闭时释放连接，HTTP 优雅退出窗口 10 秒。Worker 在自己的 main 中装配依赖，没有完整复用 API 生命周期管理。
+主要调用关系为 router → api → service；initialize 装配 utils 实现。API 与 Worker 是不同进程，Docker 入口可在同一容器内同时启动它们。空实现 seed 命令已移除。
 
-## 2. 分层及源码导航
+PostgreSQL 保存 users、fronze（当前实际拼写）、merchant、vps_detail、vps_stocks、site_settings、user_mail_verifications、password_reset_requests、notices 和 schema_migrations。Redis 保存 `user:favors:<uid>` 收藏集合、冻结缓存及采集/通知 Stream。**Redis 不全是可丢弃缓存，备份 PostgreSQL 不会备份用户收藏。**
 
-```text
-router/          路由分组、中间件绑定
-api/             JSON/query 绑定、当前用户、Cookie、统一响应
-middle/          request_id、日志、恢复、CORS、限流、认证、管理员、CSRF
-service/         业务校验、事务、SQL 查询、输出组装
-model/request/   HTTP 输入
-model/response/  HTTP 输出和包络
-model/entity/    GORM 实体和表映射
-model/dto/       内部 CollectionTask
-model/errcode/   业务错误映射
-iface/           auth、froze、mail、collect、message、enqueue 能力契约
-utils/           JWT、bcrypt、SMTP、Redis、采集器等具体实现
-task/            调度和消息处理
-initialize/      API 依赖与连接装配
-flag/            CLI 业务
-migrations/      SQL 迁移
+## 2. 本地运行与配置
+
+在 `backend/` 下复制 `.env.example` 为 `.env`，填写实际数据库、Redis 和密钥。配置从当前工作目录可选读取 `.env`；不要把真实配置提交到 Git。
+
+```bash
+cd backend
+go run ./cmd/migrate status --dir migrations
+go run ./cmd/migrate up --dir migrations
+go run ./cmd/api
 ```
 
-当前没有 repository 层，service 直接通过 GORM 读写数据库。目录业务由 `catalog_helpers.go` 统一校验、错误映射和响应转换；账户辅助方法主要在 `user.go`、`mail_helpers.go`。扩展时沿用这套结构。
+另开终端，设置 `WORKER_ENABLED=true` 后运行 `go run ./cmd/worker`。本地 API 不自动迁移，也不自动启动 Worker。正常使用 `APP_MODE=runtime`；skeleton 仅保留给无数据库的路由/失败关闭测试，不能替代生产配置，Worker 也没有同等无依赖启动模式。
 
-## 3. HTTP 请求生命周期
-
-全局顺序：RequestID → Logging → Recovery → CORS → 可选 RateLimit。路径再叠加认证、管理员或 CSRF 校验。
-
-- `/api/v1/auth` 写请求要求 CSRF Cookie 与 `X-CSRF-Token`。
-- `/api/v1/me` 要求有效 Bearer AT。
-- `/api/v1/admin` 要求 AT、数据库当前角色为 admin、邮箱已验证。
-- 商家、套餐、库存、公开设置查询不要求登录。
-- 绑定失败统一返回 100001；当前未开启 JSON 未知字段拒绝，也未输出细粒度字段错误数组。
-- 普通成功 HTTP 200；找回验证码申请 HTTP 202；删除返回 `data:null`，不是 204。
-- `errcode.Resolve` 保留已知业务错误，未知错误映射 503/900004。
-
-健康端点不使用业务包络：live 返回 `{"status":"live"}`；ready 要求能读取迁移表、历史恰为一个版本 1、Redis Ping 成功，否则 503。ready 不校验完整表结构，也不检查 Worker、SMTP 或解析服务。
-
-### 中间件边界
-
-CORS 允许配置来源或直接同源，支持 credentials，OPTIONS 提前 204。反向代理后应配置公网 HTTPS Origin：当前同源比较依据请求 TLS/Host，不直接依赖转发协议头。请求体上限 1 MiB，HTTP ReadHeaderTimeout 为 5 秒。
-
-限流为单进程、来源 IP、固定一分钟窗口：`/auth/` 与 `/me/mail/` 共用 30 次额度，其他 API 共用 300 次额度；超限 `Retry-After:60`。多实例没有共享计数。
-
-业务响应带 request_id，头部暴露 X-Request-ID。API 使用 slog，Worker 多处仍使用标准 log，没有贯穿调度、消息和请求的统一追踪。
-
-## 4. 认证与账户
-
-### 4.1 注册、登录、刷新
-
-用户名去空白转小写，匹配 `^[a-z0-9][a-z0-9_]{2,63}$`；昵称 1–64 个有效 UTF-8 字符。密码为 **8–72 个 UTF-8 字节**，bcrypt cost 12，不应误写为字符数。公开注册仅创建 user，初始注册关闭。
-
-登录返回 AccountUser 和 AT，RT 写入 `vps_refresh` HttpOnly Cookie。JWT 分开配置 AT/RT secret 与 audience，默认 AT 15 分钟、RT 168 小时；工具实现见 `utils/jwt/jwt.go`。
-
-认证每次检查令牌、冻结、用户存在性、token_version，从 SQL 读取当前角色和邮箱状态。Refresh 验证 RT 后重新签发，但保留原 RT 截止时间。没有设备会话表或 RT 单次使用/重放追踪表。
-
-登出只清当前浏览器 RT Cookie，不撤销已复制令牌，不是全设备退出。
-
-### 4.2 CSRF 和 Cookie
-
-GET `/auth/csrf` 复用仍有效的签名值，否则创建新值；JSON 返回 `data.token` 并写 Cookie。CSRF Cookie 也为 HttpOnly，前端从 JSON 取值。
-
-两类 Cookie 均为 Path=/、无 Domain、SameSite=Lax；Secure 由 `CSRF_COOKIE_SECURE` 同时控制。生产强制 Secure；安全 CSRF Cookie 默认名 `__Host-vps_csrf`，开发默认 `vps_csrf`。真正跨站部署不能只通过 CORS 白名单解决 Cookie 限制，现成方案适合同源反向代理。
-
-### 4.3 改密、角色与管理员保护
-
-- 本人改密校验当前密码；管理员重置不需要目标旧密码。
-- 改密更新哈希、递增 token_version、消费旧安全验证码；不解除冻结。
-- 角色仅 user/admin，提升前必须验证邮箱；角色实际变化递增 token_version。
-- 降权和冻结先锁定站点设置行串行化管理员变更，再锁用户行并保护最后一个可用管理员；冲突为 409。
-- `/me` 使用认证上下文用户 ID，不接受客户端选择操作者。
-- AdminUser 仅额外公开 frozen，不返回密码哈希或邮箱。
-
-### 4.4 冻结
-
-实际 SQL 表名是 **fronze**。活动记录表示冻结，解冻软删除记录，重新冻结恢复或新建。
-
-首次冻结改变状态时递增 token_version，重复冻结不重复递增。Redis key 为 `auth:frozen:{user_id}`，默认 TTL 300 秒，是缓存寿命，不是自动解冻时间。缓存命中直接拒绝；未命中或 Redis 异常回查 SQL。
-
-事务成功后同步缓存，失败返回 cache_synced=false，不回滚数据库。解冻删缓存失败可能暂时仍被缓存阻止登录，可重试同步。解冻不恢复旧令牌。
-
-## 5. 邮箱与找回密码
-
-`service/mail.go`、`password_reset.go` 管理挑战，`utils/mail` 管理地址规范化和 SMTP。邮件在 API 请求内同步发送，当前在相关数据库事务内调用，不走 Stream。
-
-| 项目 | 规则 |
+| 配置 | 当前默认或说明 |
 | --- | --- |
-| 验证码 | 安全随机 6 位数字，bcrypt 哈希保存 |
-| 有效期/冷却 | 10 分钟 / 60 秒 |
-| 最大错误尝试 | 5 次 |
-| 对外标识 | UUID verification_id/reset_id，不是验证码或自增 ID |
-| 消费 | 一次性；改密等安全操作使旧挑战失效 |
+| `HTTP_ADDR` | `:8080` |
+| `DATABASE_URL` | 必填 PostgreSQL DSN；连接池默认 20/5 |
+| `REDIS_ADDR`、`REDIS_PASSWORD`、`REDIS_DB` | 默认 `127.0.0.1:6379`、空密码、DB 0 |
+| `JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`CSRF_SECRET` | runtime 要求至少 32 字节；使用三个不同的随机值 |
+| `JWT_ACCESS_TTL_MINUTES`、`JWT_REFRESH_TTL_HOURS` | 15 分钟、168 小时 |
+| `CSRF_TOKEN_TTL_MINUTES` | 120 分钟 |
+| `CSRF_COOKIE_SECURE` | production 默认 true 且必须为 true；对应默认名 `__Host-vps_csrf` |
+| `FRONTEND_ORIGINS`、`TRUSTED_PROXIES` | 逗号分隔，按实际域名与代理配置 |
+| `RATE_LIMIT_ENABLED` | true |
+| `MAIL_ENABLED` | false；启用后配置 SMTP 主机、端口、凭据、发件人、TLS 模式 |
+| `SMTP_TLS_MODE`、`SMTP_TIMEOUT_SECONDS` | starttls、10 秒；TLS 模式支持 starttls/tls/none |
+| `WORKER_ENABLED` | false；控制调度与消费循环 |
+| `FLARE_RESOLVER_URL` | `http://localhost:8191/v1`，容器内 localhost 指容器自身 |
+| `STOCK_STREAM`、`NOTICE_STREAM` | `stock:observations`、`notice:targets` |
+| `STOCK_CONSUMER_GROUP`、`NOTICE_CONSUMER_GROUP` | `vps-monitor` |
+| `STOCK_CONSUMER_NAME`、`NOTICE_CONSUMER_NAME` | `worker-1`；并行实例应使用不同名称 |
+| `WORKER_READ_COUNT`、`WORKER_BLOCK_SECONDS` | 10 条、5 秒 |
+| `NOTICE_DURATION`、`NOTICE_RESET_HOURS` | 发送间隔 10 分钟、计数重置间隔 168 小时 |
+| `START_WORKER`、`MIGRATE_ON_START` | Docker 入口使用，默认 false |
 
-首次绑定发送目标邮箱验证码；换绑已有邮箱需当前密码，完成验证前保留旧邮箱。绑定投递失败返回 503/200014。
+完整变量以 `config/config.go` 与 `backend/.env.example` 为准。仅把变量写入根 `.env` 不代表它会进入容器：当前 Compose 未透传所有 Worker 参数，特别是 `FLARE_RESOLVER_URL`、`NOTICE_STREAM` 等；启用对应能力前需在服务 environment 中显式传入，解析服务也需自行部署并可达。
 
-找回申请对未知、未验证邮箱和冷却中的请求返回中性 202。统一邮件配置不可用返回 503；特定地址投递失败回滚事务、记录 reset_id，仍返回中性受理结果。202 不表示已投递。重置成功更新密码、撤销旧令牌，不解冻。
+首次管理员创建：在当前终端通过 `ADMIN_PASSWORD` 提供 8–72 UTF-8 字节密码，执行 `go run ./cmd/admin -action create -username administrator -nickname Administrator`。登录该候选账号完成真实邮箱验证后，再执行 `go run ./cmd/admin -action promote -username administrator`，重新登录取得新角色。公开注册默认关闭，无默认管理员或演示账号。
 
-SMTP 支持 starttls/tls/none，默认超时 10 秒。同步发送仍存在邮件已发但事务后来提交失败的窗口，不具备邮件和 SQL 的原子一致性。
+## 3. API 与业务规则
 
-## 6. 目录、设置和库存
+HTTP 前缀 `/api/v1`。响应为 `{ code, message, data, request_id }`，业务成功码 0；分页 data 为 `{ items, total, page, page_size }`，默认每页 20、最大 100。ID 与金额以字符串传输。
 
-### 商家
-
-code 去空白转小写，匹配 `^[a-z0-9][a-z0-9._-]{0,63}$`，全表唯一，更新不接受 code。名称最多 128 字符。URL 为 HTTP/HTTPS、主机非空、无用户信息、最多 4096 字节。
-
-公开仅启用且未删除，后台可查停用项。删除前检查未删除关联 VPS，有关联返回 409，不级联删除。软删除不释放唯一 code。
-
-### VPS
-
-`(merchant_id,code)` 全表唯一，软删除不释放组合。更新允许改变商家与 code，是完整可编辑对象更新；map 更新保存 false、0、null。
-
-| 字段 | 规则 |
+| 路由组 | 能力 |
 | --- | --- |
-| name / description | 1–128 字符 / 最多 10000 字符 |
-| cpu_cores / memory_mb | 正 int32 |
-| disk_gb / ipv4_count / ipv6_count | 非负 int32 |
-| disk_type | 小写非空字符串，最多 32 字符；后端没有固定枚举 |
-| transfer_gb / port_mbps | null 未知、0 不限量；非空为非负 int32 |
-| has_ipv4 / has_ipv6 | 分别等于对应数量是否大于 0 |
-| price_amount | 十进制字符串，整数 1–12 位、小数最多 8 位，不接受科学计数法 |
-| currency | 归一化为三位大写字母 |
-| billing_period | monthly / quarterly / yearly / one_time |
-| purchase_url | HTTP/HTTPS；也作为当前采集源 URL |
+| `/auth` | CSRF、注册、登录、刷新、退出、找回密码 |
+| `/me` | 个人资料/密码/邮箱、收藏、微信通知设置 |
+| `/merchant`、`/vps`、`/stock`、`/settings` | 公开可见目录、库存、站点设置 |
+| `/admin/user`、`/admin/froze` | 用户管理、角色、重置密码、冻结 |
+| `/admin/merchant`、`/admin/vps` | 管理端目录读写 |
+| `/admin/settings`、`/admin/dashboard` | 设置与看板 |
 
-价格使用 decimal 与 SQL numeric(20,8)，响应可能去除末尾零。价格排序按存储金额，不折算汇率或付款周期。
+请求字段以 router、model/request 为准，响应以 model/response 为准；service 是业务规则来源。变更接口时同步请求/响应类型、前端 types/api 和这两份技术文档，不再单独维护 OpenAPI 文件。
 
-公开列表、详情、库存同时要求商家与 VPS 未删除且启用。列表筛选 q、merchant_id、currency、billing_period、status、sort；后台多 enabled。排序白名单，库存筛选不按 stale 改写 status。
+认证使用 Access/Refresh JWT、Cookie 与认证写请求 CSRF；鉴权结合数据库当前角色、邮箱、冻结状态和 token_version。改密及管理员重置密码可撤销旧令牌。邮箱与找回密码挑战采用随机码、哈希、过期、冷却、错误次数上限和一次性消费；邮件通过 API 同步调用 SMTP，不走通知 Stream。
 
-目录创建/编辑不写库存。VPS 删除软删除套餐，不物理删除库存行。返回列表时批量读取商家/库存，组装公共或管理视图。
+公开列表排除停用或软删除的商家、VPS。创建套餐不会创建虚假库存。商家删除有引用约束。金额排序按原始金额，不折算汇率和周期。
 
-### 设置
+收藏的增删参数为 query `vpsId`：`POST /me/addFavor`、`DELETE /me/delFavor`；`GET /me/listFavors` 复用公开 VPS 筛选与分页。添加前检查可见性，取消只验证 ID；重复操作可成功。列表过滤不可见产品，但 Redis 中旧关系可能保留；total 是筛选后的可见数量。
 
-site_settings 活动记录唯一，保存站点名、注册和全局采集开关。默认注册/采集关闭；无行时查询返回安全关闭默认值，不创建数据。
+微信通知为全部收藏的总开关。`GET /me/notice` 返回 key_bound/notice_enabled；`PUT /me/notice/server-key` 保存 send_key；`POST /me/addNotice`、`DELETE /me/delNotice` 无 VPS 参数。Key 保存不自动开启通知，也不验证第三方送达。未绑定开启返回业务码 500005；关闭保留 Key、收藏与历史次数。Key 去除首尾空白后最长 64 字符，不接受占位符、内部空白或控制字符，完整 Key 不返回前端。
 
-部分更新用指针区分省略与 false；无有效字段返回参数错误。管理响应为嵌套 settings 加顶层 collection_enabled、collector_implemented、updated_at。当前 **collector_implemented 固定 true**，不检测部署能力或进程健康。
+## 4. 库存采集与通知
 
-### 库存和统计
+Worker 启动会连接 PostgreSQL/Redis 并确保两个消费组存在；`WORKER_ENABLED=false` 不代表整个入口完全不接触依赖。当前进程启动后立即调度，采集每 5 分钟、通知每 2 分钟扫描一次。多个 Worker 也会各自启动调度器，扩容前需考虑重复调度。
 
-vps_stocks 每 VPS 一行快照，没有历史表。对外仅 vps_id、status、quantity、last_checked_at、last_in_stock_at、is_stale。
+采集目标受全局、商家、VPS 三层许可及业务可见性限制，通过 Redis Stream 传递购买地址等任务。消费者按 MerchantCode 匹配 DMIT/Akko，调用 FlareSolverr 兼容服务解析购买页面；两种采集器都已有有货/无货特征识别，未识别页面返回解析错误，不保证能适应第三方页面变化。
 
-无库存行返回 status=3、数量/时间 null、stale=true，不插入假记录。检查时间为空或超过 15 分钟为 stale，保留状态。last_in_stock_at 是最后一次确认有货时间，后续无货不清空。写入与 Stream ID 防旧覆盖见采集文档。
+| 库存状态 | 观测语义 |
+| --- | --- |
+| 1 | 有货，数量已知 |
+| 2 | 无货，数量 0 |
+| 3 | 未知 |
+| 4 | 有货，数量未知 |
 
-看板一次 SQL 统计未删除用户、冻结用户、商家、套餐、有货和未知套餐，包含停用项；套餐要求商家未删除。无库存行计未知；stale 不影响按 status 统计。
+写入更新 vps_stocks 当前快照，使用事务、行锁和 Stream delivery_id 比较拒绝不新的观测；不存在库存历史表。最近确认有货时间在未知/无货更新时保留。超过 15 分钟未更新或无记录时对外标记 is_stale。
 
-## 7. 数据模型和迁移
+采集正常入库后 ACK；页面结构错误可直接 ACK，其他失败可能留 Pending。库存 Pending 恢复每分钟认领空闲消息后直接 ACK，不重新采集，依赖后续调度。Stream ACK 不等于删除数据，需监控 Stream 增长及业务更新时间。
 
-实体共用自增 ID、创建/更新时间、软删除时间；对外 ID 为十进制字符串，内部 Go uint/SQL bigint。
+通知调度扫描开启通知用户及其有货收藏，消费者发送前重新读取用户开关与 Key，按用户/VPS 记录次数。在行锁内判断间隔并发送，默认最多累计 3 次；距最后一次成功发送达到 `NOTICE_RESET_HOURS` 后，下次成功发送重新计数。间隔不足、次数超限或禁用等失败消息可能保留 Pending，恢复逻辑重试并在投递次数超过 3 后 ACK。
 
-| 表 | 核心字段/关系 | 约束与用途 |
-| --- | --- | --- |
-| users | username、nickname、password_hash、role、mail、验证时间、token_version | username/mail 唯一，版本 > 0 |
-| fronze | user_id → users | user_id 唯一，活动行表示冻结 |
-| merchant | code、name、website_url、两类开关 | code 唯一 |
-| vps_detail | merchant_id → merchant、规格、价格、购买链接、两类开关 | 商家内 code 唯一，规格/币种/周期约束 |
-| vps_stocks | vps_id → vps_detail、状态、数量、检查/有货时间、delivery_id | vps_id 唯一；delivery_id 数字-数字格式 |
-| site_settings | 站点名、注册、采集开关 | 活动行单例 |
-| user_mail_verifications | user_id、public_id、目标邮箱、code_hash、过期/消费/错误次数 | public_id 唯一 |
-| password_reset_requests | user_id、public_id、code_hash、过期/消费/错误次数 | public_id 唯一 |
-| schema_migrations | 版本、名称、校验和、应用时间 | 迁移服务维护 |
+通知外部发送与数据库提交无法构成同一原子事务，因此不承诺绝不重复送达。关闭后已通过开关检查的发送可能完成。API 健康不能证明 Worker 正常：当前某个后台循环退出只记录日志，主进程可能继续存活；需检查任务日志、库存时间和通知记录。
 
-业务外键为 RESTRICT；主要索引覆盖软删除、商家目录、库存状态、验证码用户/过期查询。完整约束见 [001_initial.up.sql](../backend/migrations/001_initial.up.sql)。
+## 5. 数据库基线与后续数据保留
 
-当前只有 001_initial，面向空库。迁移器在事务内使用 PostgreSQL advisory lock，检查连续版本、SHA-256 校验和。up 应用待执行迁移，down 回滚最近版本；语句按 `-- migrate:split` 分隔。
+本次 dev 重构版本采用**全新部署**，不转换旧 main 的数据库。旧 001_initial、002_notifications、003_stock_status 已删除，当前只保留一对新文件：
 
-旧库缺少 delivery_id 等字段时，需要升级迁移和历史回填，不能重写或重跑已应用 001。新增版本还需调整当前写死版本 1 的 readiness 检查。
+| 文件 | 用途 |
+| --- | --- |
+| `001_baseline.up.sql` | 空库一次建立全部九张业务表、索引、约束与默认站点设置 |
+| `001_baseline.down.sql` | 按依赖顺序删除业务表，仅用于可丢弃的测试库，会丢失全部业务数据 |
 
-## 8. 开发与验证
+基线已包含 users 通知开关/Key、notices 发送记录、VPS has_stock、库存状态 1/2/3/4。迁移记录表 schema_migrations 由执行器管理。当前 `RequiredMigrationVersion=1`，首次部署后数据库应只有版本 1 的已应用记录。
 
-新增 HTTP 能力依次维护 request/response、service、api、router、OpenAPI、前端类型与调用。API 不越过 service 操作密码工具、Redis 或数据库。采集扩展见 [collection.md](collection.md)。
+这次允许重建基线，是因为新部署明确从空库开始。**首次发布后，001_baseline 即成为不可修改的历史，以后的功能只能追加 002、003…，不再重建基线或重置数据库。** 新基线不能用于旧 main 数据库，也不能用于执行过旧 SQL 的 dev 测试库；需要为新部署准备空数据库和独立 Redis 数据存储。
 
-本次 `go build ./...` 通过；测试包因旧 fake Ack 签名不匹配无法编译。Redis 工具测试还包含本地实例无限读取，因此 `go test ./...` 不是当前无外部依赖的安全默认检查。详见 [验证记录](known-issues.md)。
+### 迁移器提供的保护
+
+`service/migration.go` / `cmd/migrate` 支持：
+
+- `<version>_<name>.up.sql` 与 `.down.sql` 成对，按正整数版本升序执行。项目使用连续编号，新增时同步 RequiredMigrationVersion。
+- schema_migrations 记录名称、版本、SHA-256 和应用时间；重复 up 跳过已应用版本，不重新建表或重复回填。
+- up 与 down 原始字节共同参与校验；已应用文件被修改、删除、改名，或历史跳过前置文件时拒绝迁移。不能手工改校验和绕过检查。
+- 一次 up 中所有待执行文件和版本记录在一个事务里提交，并持有 PostgreSQL advisory lock；任何语句失败时，本批结构、数据和版本记录一起回滚。
+- down 只回滚最新版本，不自动执行。它是否丢数据取决于 SQL，生产默认只执行 up，绝不把基线 down 当成升级步骤。
+- status 也使用锁和事务，元数据表不存在时会创建它；没有 force/baseline/指定目标版本功能。
+
+`.gitattributes` 固定迁移 SQL 使用 LF，保证 Windows、Linux 和镜像里的文件校验和一致。已发布文件不能再调整注释、空格、编码或换行。
+
+事务和校验和能防止部分执行、重复执行和历史漂移，**不能自动把任意 DROP/UPDATE 变成无损操作**。数据保留必须由每次新增迁移的 SQL、兼容代码和有真实旧数据的升级测试共同保证。
+
+### 后续每次改表的要求
+
+1. 从最新 main 创建工作分支，新增 `002_<change>.up.sql/down.sql`（以后继续递增）。一次文件表达一个清晰变更；已在共享环境应用的文件不再改写。
+2. up 保留已有业务行、ID、关联关系和字段含义。新字段先可空或提供合理默认值，再回填、验证，最后加约束。增加唯一约束前先查重复，收紧类型前先检查数据范围，不依赖静默截断或覆盖。
+3. 改名、替换类型或改变存储方式，按“新增字段 → 兼容读写 → 可恢复回填 → 验证数量/内容/关联 → 切换读取 → 后续单独发布清理旧字段”推进。没有保留方案时不删除仍有价值的数据。
+4. 大批量回填放到有进度、可重试的独立任务；写入过程中应保留原数据，核对完毕后再切换。不能为了缩短迁移文件，改成 drop/recreate 表或清空数据再导入。
+5. 同步 entity、service、接口、前端类型及 RequiredMigrationVersion。生产不运行 GORM AutoMigrate；显式 SQL 是结构历史的唯一维护入口。
+6. 在专用数据库验证两条路径：空库完整安装，以及上一个已部署版本有数据时增量升级。对变更涉及的列逐项检查保留/转换结果，同时验证行数、ID、外键、默认值、约束和业务读写；再重复 up 确认不重复操作。
+7. 发布前备份并验证可恢复，迁移成功后再发布匹配代码。生产修复优先新增前向迁移；down 仅在明确可保留数据并已演练时使用，不等同于恢复备份。
+
+多条 SQL 用单独一行 `-- migrate:split` 分隔，不手工写 BEGIN/COMMIT。例如未来新增可空字段的 up 可写为（仅示例，本次未新增此字段）：
+
+```sql
+SET LOCAL lock_timeout = '5s';
+-- migrate:split
+SET LOCAL statement_timeout = '60s';
+-- migrate:split
+ALTER TABLE vps_detail ADD COLUMN region_code varchar(32);
+```
+
+超时值按数据量调整，上述设置在进入文件执行后才生效，不限制此前等待迁移 advisory lock 的时间。字段一旦有数据，删除它的 down 就是有损操作；必须在发布说明中明确，不能当作自动恢复路径。
+
+**分阶段变更需要不同发布或独立回填步骤。** 当前 up 会一次执行所有 pending 文件，把“新增”和“删除旧字段”放在同一镜像的两个文件里并没有兼容窗口。
+
+小数据量优先短维护窗口内迁移。大表 CHECK/外键可评估 NOT VALID 后单独 VALIDATE；普通 ALTER TABLE 仍可能等待强锁。[PostgreSQL ALTER TABLE](https://www.postgresql.org/docs/17/sql-altertable.html)
+
+当前执行器始终使用事务，不能执行 CREATE INDEX CONCURRENTLY；未来有大表在线建索引需求时，先设计非事务执行、失败恢复及版本登记，或评估成熟迁移工具，不直接把该语句塞入普通文件。[PostgreSQL CREATE INDEX](https://www.postgresql.org/docs/17/sql-createindex.html)
+
+### 首次部署后的版本约束
+
+API ready 要求迁移记录数量、首版本、末版本与 RequiredMigrationVersion 完全匹配。新建库迁移至 1 后使用本次应用；未来追加 002 后同步发布要求版本 2 的代码。因此当前采用短维护窗口，不承诺新旧代码滚动共存；也不能假定数据库已升级后只回滚镜像就能恢复。
+
+出现校验和不一致时，恢复原已发布文件，再通过新增迁移修正。新基线与旧 main 数据库没有兼容关系，不补写版本记录或使用 IF NOT EXISTS 假装完成迁移。
+
+## 6. 部署与升级流程
+
+根目录 `.env.vps.example` 对应 `docker-compose.vps.yaml`，镜像发布工作流在 `.github/workflows/publish-images.yml`。发布到 GHCR 的 main latest、版本 tag、sha 标签中，部署优先选择固定 tag/sha，并保存旧镜像标识。Compose 依赖外部 `nginx_gateway` 网络，实际名称由 NGINX_NETWORK 指定，入口 TLS/域名反代由外部网关提供。
+
+### 本次全新部署
+
+准备全新的 PostgreSQL 数据库与独立 Redis 持久化存储，配置根 .env 的镜像 tag、域名、网络、数据库/Redis 凭据和三组密钥。不要把新应用直接连到旧 main 的业务库或旧 Redis 收藏/队列。
+
+新 Compose 项目名可以隔离默认命名的数据卷，但当前文件指定了固定 container_name；旧容器仍存在时还需处理命名冲突。修改 .env 中 POSTGRES_DB 不会自动清空或重新初始化已有 PostgreSQL 数据卷。先确认使用的卷确实属于这次新部署。
+
+首次安装按以下顺序执行（VPS Bash）：
+
+```bash
+docker compose -f docker-compose.vps.yaml pull
+docker compose -f docker-compose.vps.yaml up -d --wait postgres redis
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend up --dir /app/migrations
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
+docker compose -f docker-compose.vps.yaml up -d backend frontend
+docker compose -f docker-compose.vps.yaml exec -T backend wget -q -O - http://127.0.0.1:8080/health/ready
+```
+
+确认版本 1 已应用、ready 成功，再按第 2 节创建首个管理员、完成邮箱验证并提升权限。初始站点注册和采集许可均关闭，按需要在后台开启。保持 MIGRATE_ON_START=false。
+
+### 以后有数据时升级
+
+**当前推荐短维护窗口升级。** 先在生产副本演练并准备好新旧镜像，然后停止业务写入，备份，再用新镜像单独运行迁移，成功后启动新应用。保持 `MIGRATE_ON_START=false`，迁移作为发布步骤，不让每个容器重启都成为改表入口。
+
+以下为 VPS 上 Bash 命令示例，逐步执行，任一步失败停止后续操作；本次没有执行这些线上命令。先在根 `.env` 选择已经构建好的固定 IMAGE_TAG：
+
+```bash
+docker compose -f docker-compose.vps.yaml pull backend frontend
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
+# 开启网关维护页，暂停其他写入者，再停止 API 与同容器 Worker。
+docker compose -f docker-compose.vps.yaml stop frontend backend
+```
+
+在仍运行的 PostgreSQL 容器内生成自定义格式备份，再复制到宿主机，避免通过不同 shell 的重定向处理二进制：
+
+```bash
+backup_name="vps-monitor-$(date +%Y%m%d-%H%M%S).dump"
+mkdir -p backups
+docker compose -f docker-compose.vps.yaml exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f "$1"' sh "/tmp/$backup_name"
+docker compose -f docker-compose.vps.yaml cp "postgres:/tmp/$backup_name" "backups/$backup_name"
+```
+
+备份包含用户及通知 Key 等敏感数据，复制到受控的持久存储。发布前应在隔离数据库实际 pg_restore 并验证业务数据；只列目录或看到 dump 文件不能证明可恢复。自定义格式可通过 pg_restore 还原。[PostgreSQL pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html)、[pg_restore](https://www.postgresql.org/docs/17/app-pgrestore.html)
+
+完整灾备还需要 Redis 的持久化备份（收藏、队列）及配置/密钥。数据库备份与 Redis 恢复要考虑一致时间点；不要为了迁移清空 Redis 或删除 Docker 数据卷。
+
+```bash
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend up --dir /app/migrations
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
+docker compose -f docker-compose.vps.yaml up -d backend frontend
+docker compose -f docker-compose.vps.yaml exec -T backend wget -q -O - http://127.0.0.1:8080/health/ready
+```
+
+`--entrypoint /app/migrate` 很重要：否则镜像默认脚本会启动 API/Worker。迁移成功与 status 一致后才启动应用，验证登录、目录、收藏及 Worker 日志，最后撤下维护页。备份目录应在 Git 之外管理。
+
+`/health/live` 只表示 HTTP 进程存活；`/health/ready` 检查迁移版本和 Redis 可用性，SQL 查询本身也验证数据库连接。当前 Docker healthcheck 使用 live，不能把容器 healthy 当作数据库已升级。
+
+迁移命令失败时本次事务回滚，排除原因后再执行。迁移成功但新应用失败时优先修复前进；不要自动 down。旧应用的 ready 会因数据库版本比代码新而失败，因此当前不能承诺“回滚镜像即可恢复”。需事先在副本验证旧代码/新结构兼容、选择已经验证不会丢失所需数据的 down，或安排从备份恢复；恢复备份会丢失备份之后写入的数据。
+
+未来要求不停机发布时，再引入明确的最小/最大兼容 schema 版本、分阶段改表和独立迁移作业，并演练新旧 API/Worker 共存与回滚；本次没有改变迁移器或健康检查语义。
+
+## 7. 测试与维护
+
+在 backend 下：
+
+```bash
+go test ./... -timeout 90s
+go build ./...
+```
+
+未设置 TEST_DATABASE_URL/TEST_REDIS_ADDR 时，外部 PostgreSQL/Redis 集成用例跳过。无断言的本地 FlareSolverr 调试文件和固定密码、无限循环的 Redis 手工调试测试已清理；其余路由、CSRF、认证、迁移文件校验、采集解析和通知业务测试保留。
+
+独立测试环境示例（Bash）：
+
+```bash
+docker compose -f compose.test.yml up -d --wait
+TEST_DATABASE_URL='postgres://vps_test:vps_test@127.0.0.1:55432/vps_monitor_test?sslmode=disable' \
+TEST_REDIS_ADDR='127.0.0.1:56379' go test ./service ./test -timeout 120s -v
+docker compose -f compose.test.yml down
+```
+
+测试会建立独立 PostgreSQL schema；runtime 测试使用 Redis DB 14。仅使用专用测试实例，禁止传入生产连接。service/migration_integration_test.go 使用独立 schema 检查空库安装、九张业务表已有数据的增量升级、重复执行、历史篡改拒绝及失败事务回滚。每次真实业务改表仍需补充对应的数据转换断言，并在上一部署版本的副本演练。
+
+本次验证：在独立 PostgreSQL 17 容器中完成新基线安装、九张业务表数据保留的示例增量迁移、重复执行、历史校验和拒绝、跨文件失败回滚及示例字段回退测试；后端 go test ./... 和 go build ./... 通过。通知 PostgreSQL 集成测试已启用，需要 Redis 的 runtime 集成测试因未配置 TEST_REDIS_ADDR 跳过。上述测试验证迁移机制与本次基线，未来每个实际改表仍必须增加对应的数据保留断言。旧 main 数据库未连接、未升级、未清理。

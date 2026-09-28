@@ -1,3 +1,7 @@
+-- Destructive: only for disposable databases. Production upgrades use forward migrations.
+DROP TABLE IF EXISTS notices;
+
+-- migrate:split
 DROP TABLE IF EXISTS password_reset_requests;
 
 -- migrate:split

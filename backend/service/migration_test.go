@@ -34,7 +34,7 @@ func TestInitialMigrationMatchesCurrentScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) == 0 || files[0].Version != 1 || files[0].Name != "initial" {
+	if len(files) == 0 || files[0].Version != 1 || files[0].Name != "baseline" {
 		t.Fatalf("unexpected migrations: %#v", files)
 	}
 	lower := strings.ToLower(files[0].UpSQL)
@@ -55,7 +55,7 @@ func TestInitialMigrationMatchesCurrentScope(t *testing.T) {
 	}
 }
 
-func TestNotificationsMigrationAndRequiredVersion(t *testing.T) {
+func TestBaselineSchemaAndRequiredVersion(t *testing.T) {
 	files, err := loadMigrationFiles(filepath.Join("..", "migrations"))
 	if err != nil {
 		t.Fatal(err)
@@ -63,12 +63,9 @@ func TestNotificationsMigrationAndRequiredVersion(t *testing.T) {
 	if len(files) != RequiredMigrationVersion || files[len(files)-1].Version != RequiredMigrationVersion {
 		t.Fatal("readiness version does not match bundled migrations")
 	}
-	if files[1].Name != "notifications" {
-		t.Fatal("missing notification migration")
-	}
-	for _, required := range []string{"ADD COLUMN notice_enabled", "ADD COLUMN server_turbo_key", "ADD COLUMN has_stock", "CREATE TABLE notices", "UNIQUE (user_id, vps_id)", "send_notice_times", "send_at"} {
-		if !strings.Contains(files[1].UpSQL, required) {
-			t.Errorf("missing notification schema: %s", required)
+	for _, required := range []string{"notice_enabled boolean NOT NULL DEFAULT false", "server_turbo_key varchar(64) NOT NULL DEFAULT ''", "has_stock boolean NOT NULL DEFAULT false", "CREATE TABLE notices", "UNIQUE (user_id, vps_id)", "send_notice_times", "send_at", "CHECK (status IN (1, 2, 3, 4))"} {
+		if !strings.Contains(files[0].UpSQL, required) {
+			t.Errorf("missing baseline schema: %s", required)
 		}
 	}
 	for _, file := range files {

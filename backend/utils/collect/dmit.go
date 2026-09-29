@@ -18,7 +18,7 @@ func (c DmitCollector) Collect(ctx context.Context, r collect.CollectRequest) (c
 	if !c.Enabled {
 		return collect.Observation{}, nil
 	}
-	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 10000, c.Name())
+	f, err := FlareRequest(ctx, r.SourceURL, r.ProcessorURL, 15000, c.Name())
 	if err != nil {
 		return collect.Observation{}, errcode.FlareResolveFailed
 	}

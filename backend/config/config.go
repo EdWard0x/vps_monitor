@@ -147,7 +147,7 @@ func Load() (Config, error) {
 			ReadCount:           int64(integer("WORKER_READ_COUNT", 10)),
 			Block:               durationSeconds("WORKER_BLOCK_SECONDS", 5),
 			NoticeDuration:      durationMinutes("NOTICE_DURATION", 10),
-			NoticeResetDuration: durationHours("NOTICE_RESET_HOURS", 168),
+			NoticeResetDuration: durationHours("NOTICE_RESET_HOURS", 24),
 		},
 		Logging: Logging{Level: env("LOG_LEVEL", "info"), Format: env("LOG_FORMAT", "json")},
 	}

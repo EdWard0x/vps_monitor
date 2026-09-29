@@ -1,7 +1,10 @@
 .git
+.github
 .idea
+.env*
 .gomodcache
-backend/.env
+backups
+docs
+frontend
+backend/.env*
 backend/.gocache
-frontend/node_modules
-frontend/dist

@@ -21,9 +21,9 @@ Go 1.25、Gin、GORM、PostgreSQL、go-redis/v9。生产编排使用 PostgreSQL 
 | `migrations` | 不可改写的已发布 SQL 历史 |
 | `test`、各包 `*_test.go` | 无依赖与外部服务集成测试 |
 
-主要调用关系为 router → api → service；initialize 装配 utils 实现。API 与 Worker 是不同进程，Docker 入口可在同一容器内同时启动它们。空实现 seed 命令已移除。
+主要调用关系为 router → api → service；initialize 装配 utils 实现。API 与 Worker 是不同进程，生产 Compose 由同一个 `backend` 容器的入口脚本启动。空实现 seed 命令已移除。
 
-PostgreSQL 保存 users、fronze（当前实际拼写）、merchant、vps_detail、vps_stocks、site_settings、user_mail_verifications、password_reset_requests、notices 和 schema_migrations。Redis 保存 `user:favors:<uid>` 收藏集合、冻结缓存及采集/通知 Stream。**Redis 不全是可丢弃缓存，备份 PostgreSQL 不会备份用户收藏。**
+PostgreSQL 保存 users、fronze（当前实际拼写）、merchant、vps_detail、vps_stocks、site_settings、user_mail_verifications、password_reset_requests、notices 和 schema_migrations。Redis 保存 `user:favors:<uid>` 收藏集合、冻结缓存及采集/通知 Stream。生产 Compose 通过根目录 `redis.conf` 同时启用周期性 RDB 快照、每秒同步的 AOF，并让 AOF 重写使用 RDB 基础文件；两类文件都保存在 `redis_data` 卷的 `/data` 下。**Redis 不全是可丢弃缓存，备份 PostgreSQL 不会备份用户收藏。**
 
 ## 2. 本地运行与配置
 
@@ -60,7 +60,7 @@ go run ./cmd/api
 | `NOTICE_DURATION`、`NOTICE_RESET_HOURS` | 发送间隔 10 分钟、计数重置间隔 168 小时 |
 | `START_WORKER`、`MIGRATE_ON_START` | Docker 入口使用，默认 false |
 
-完整变量以 `config/config.go` 与 `backend/.env.example` 为准。仅把变量写入根 `.env` 不代表它会进入容器：当前 Compose 未透传所有 Worker 参数，特别是 `FLARE_RESOLVER_URL`、`NOTICE_STREAM` 等；启用对应能力前需在服务 environment 中显式传入，解析服务也需自行部署并可达。
+完整变量以 `config/config.go` 与 `backend/.env.example` 为准。根目录 Compose 只传入容器部署必需或需要覆盖默认值的变量；库存和通知 Stream 等参数沿用后端代码默认值。`START_WORKER=true` 让入口脚本启动 Worker 进程，`WORKER_ENABLED=true` 让它运行采集和通知循环。FlareSolverr 仅在内部网络可访问；开发用的 `backend/.env` 不会自动进入生产容器。
 
 首次管理员创建：在当前终端通过 `ADMIN_PASSWORD` 提供 8–72 UTF-8 字节密码，执行 `go run ./cmd/admin -action create -username administrator -nickname Administrator`。登录该候选账号完成真实邮箱验证后，再执行 `go run ./cmd/admin -action promote -username administrator`，重新登录取得新角色。公开注册默认关闭，无默认管理员或演示账号。
 
@@ -172,13 +172,13 @@ API ready 要求迁移记录数量、首版本、末版本与 RequiredMigrationV
 
 ## 6. 部署与升级流程
 
-根目录 `.env.vps.example` 对应 `docker-compose.vps.yaml`，镜像发布工作流在 `.github/workflows/publish-images.yml`。发布到 GHCR 的 main latest、版本 tag、sha 标签中，部署优先选择固定 tag/sha，并保存旧镜像标识。Compose 依赖外部 `nginx_gateway` 网络，实际名称由 NGINX_NETWORK 指定，入口 TLS/域名反代由外部网关提供。
+根目录 `.env.vps.example` 对应 `docker-compose.vps.yaml`，镜像发布工作流在 `.github/workflows/publish-images.yml`。发布到 GHCR 的 main latest、版本 tag、sha 标签中，部署优先选择固定 tag/sha，并保存旧镜像标识。手动从 dev 构建只发布 `sha-*`，不会更新 `latest`。Compose 依赖外部 `nginx_gateway` 网络，实际名称由 NGINX_NETWORK 指定，入口 TLS/域名反代由外部网关提供。该网关应指向 `vps-monitor-frontend:80`；前端容器代理 `/api/` 和 `/health/` 到内部的 `backend:8080`。数据库、Redis、后端、FlareSolverr 都不直接接入外部网关网络。
 
 ### 本次全新部署
 
-准备全新的 PostgreSQL 数据库与独立 Redis 持久化存储，配置根 .env 的镜像 tag、域名、网络、数据库/Redis 凭据和三组密钥。不要把新应用直接连到旧 main 的业务库或旧 Redis 收藏/队列。
+准备全新的 PostgreSQL 数据库与独立 Redis 持久化存储，将 `docker-compose.vps.yaml`、`redis.conf` 放在 VPS 同一目录，从 `.env.vps.example` 复制该目录的 `.env`，配置已发布的镜像 tag、域名、网关网络、数据库/Redis 凭据和三组密钥。PostgreSQL 密码会嵌入 URL，请使用 URL 安全字符。不要把新应用直接连到旧 main 的业务库或旧 Redis 收藏/队列。
 
-新 Compose 项目名可以隔离默认命名的数据卷，但当前文件指定了固定 container_name；旧容器仍存在时还需处理命名冲突。修改 .env 中 POSTGRES_DB 不会自动清空或重新初始化已有 PostgreSQL 数据卷。先确认使用的卷确实属于这次新部署。
+Compose 项目名固定为 `vps-monitor`，数据卷属于该项目。修改 `.env` 中 `POSTGRES_DB` 不会自动清空或重新初始化已有 PostgreSQL 数据卷。先确认使用的卷确实属于这次新部署。外部 `NGINX_NETWORK` 网络需要预先创建，并让网关容器接入。
 
 首次安装按以下顺序执行（VPS Bash）：
 
@@ -189,20 +189,32 @@ docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/m
 docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
 docker compose -f docker-compose.vps.yaml up -d backend frontend
 docker compose -f docker-compose.vps.yaml exec -T backend wget -q -O - http://127.0.0.1:8080/health/ready
+docker compose -f docker-compose.vps.yaml logs --tail=50 backend
 ```
 
-确认版本 1 已应用、ready 成功，再按第 2 节创建首个管理员、完成邮箱验证并提升权限。初始站点注册和采集许可均关闭，按需要在后台开启。保持 MIGRATE_ON_START=false。
+确认版本 1 已应用、ready 成功且后端日志没有 Worker 启动错误，再创建首个管理员。镜像部署时运行镜像内的管理命令；`ADMIN_PASSWORD` 只经环境变量传给一次性容器，不写进 `.env` 或命令参数：
+
+```bash
+read -rsp 'Admin password: ' ADMIN_PASSWORD; echo
+export ADMIN_PASSWORD
+docker compose -f docker-compose.vps.yaml run --rm --no-deps -e ADMIN_PASSWORD --entrypoint /app/admin backend -action create -username administrator -nickname Administrator
+unset ADMIN_PASSWORD
+# 候选账号登录并完成真实邮箱验证后：
+docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/admin backend -action promote -username administrator
+```
+
+初始站点注册和采集许可均关闭，按需要在后台开启。迁移保持为单独命令，不在 API 启动时自动执行。FlareSolverr 镜像和 Worker 需要额外内存；采集目标也依赖第三方页面可访问。
 
 ### 以后有数据时升级
 
-**当前推荐短维护窗口升级。** 先在生产副本演练并准备好新旧镜像，然后停止业务写入，备份，再用新镜像单独运行迁移，成功后启动新应用。保持 `MIGRATE_ON_START=false`，迁移作为发布步骤，不让每个容器重启都成为改表入口。
+**当前推荐短维护窗口升级。** 先在生产副本演练并准备好新旧镜像，然后停止业务写入，备份，再用新镜像单独运行迁移，成功后启动新应用。Compose 固定关闭 API 启动时自动迁移，迁移作为独立发布步骤。
 
 以下为 VPS 上 Bash 命令示例，逐步执行，任一步失败停止后续操作；本次没有执行这些线上命令。先在根 `.env` 选择已经构建好的固定 IMAGE_TAG：
 
 ```bash
 docker compose -f docker-compose.vps.yaml pull backend frontend
 docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
-# 开启网关维护页，暂停其他写入者，再停止 API 与同容器 Worker。
+# 开启网关维护页，暂停其他写入者，再停止前端与后端（包括 Worker）。
 docker compose -f docker-compose.vps.yaml stop frontend backend
 ```
 
@@ -224,11 +236,12 @@ docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/m
 docker compose -f docker-compose.vps.yaml run --rm --no-deps --entrypoint /app/migrate backend status --dir /app/migrations
 docker compose -f docker-compose.vps.yaml up -d backend frontend
 docker compose -f docker-compose.vps.yaml exec -T backend wget -q -O - http://127.0.0.1:8080/health/ready
+docker compose -f docker-compose.vps.yaml logs --tail=50 backend
 ```
 
 `--entrypoint /app/migrate` 很重要：否则镜像默认脚本会启动 API/Worker。迁移成功与 status 一致后才启动应用，验证登录、目录、收藏及 Worker 日志，最后撤下维护页。备份目录应在 Git 之外管理。
 
-`/health/live` 只表示 HTTP 进程存活；`/health/ready` 检查迁移版本和 Redis 可用性，SQL 查询本身也验证数据库连接。当前 Docker healthcheck 使用 live，不能把容器 healthy 当作数据库已升级。
+`/health/live` 只表示 HTTP 进程存活；`/health/ready` 检查迁移版本和 Redis 可用性，SQL 查询本身也验证数据库连接。Compose 使用 ready 作为后端 healthcheck，前端会等待 API 就绪；该检查不代表 Worker 正常运行，还需检查后端日志和实际采集/通知结果。
 
 迁移命令失败时本次事务回滚，排除原因后再执行。迁移成功但新应用失败时优先修复前进；不要自动 down。旧应用的 ready 会因数据库版本比代码新而失败，因此当前不能承诺“回滚镜像即可恢复”。需事先在副本验证旧代码/新结构兼容、选择已经验证不会丢失所需数据的 down，或安排从备份恢复；恢复备份会丢失备份之后写入的数据。
 

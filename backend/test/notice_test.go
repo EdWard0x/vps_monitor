@@ -26,6 +26,7 @@ func TestNoticeRoutesRequireAuthentication(t *testing.T) {
 	app := skeletonApp(t)
 	for _, tc := range []struct{ method, path string }{
 		{"GET", "/notice"}, {"PUT", "/notice/server-key"},
+		{"POST", "/notice/test"},
 		{"POST", "/addNotice"}, {"DELETE", "/delNotice"},
 	} {
 		req := httptest.NewRequest(tc.method, "/api/v1/me"+tc.path, strings.NewReader(`{"send_key":"test-key"}`))
@@ -120,6 +121,7 @@ func TestNoticeRouterLifecycle(t *testing.T) {
 		}
 	}
 	assertSettings(call("GET", "/notice", "", 200, 0), false, false)
+	call("POST", "/notice/test", "{}", 500, errcode.ServerTurboNoRecord.Code)
 	call("POST", "/addNotice", "{}", 500, errcode.ServerTurboNoRecord.Code)
 	for _, body := range []string{`{}`, `{"send_key":"{key}"}`, `{"send_key":"a b"}`, `{"send_key":123}`, `{`} {
 		call("PUT", "/notice/server-key", body, 400, errcode.InvalidArgument.Code)

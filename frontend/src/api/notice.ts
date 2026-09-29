@@ -22,6 +22,9 @@ export const getNotice = async (): Promise<Envelope<NoticeSettings>> =>
 export const saveServerKey = async (sendKey: string): Promise<Envelope<NoticeSettings>> =>
   assertSettings(await apiClient.put<NoticeSettings>('/me/notice/server-key', { send_key: sendKey }));
 
+export const testNotice = async (): Promise<Envelope<string>> =>
+  assertSuccess(await apiClient.post<string>('/me/notice/test'));
+
 export const enableNotice = async (): Promise<Envelope<string>> =>
   assertSuccess(await apiClient.post<string>('/me/addNotice'));
 

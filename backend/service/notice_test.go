@@ -29,7 +29,7 @@ func TestNoticeServiceWithoutDatabase(t *testing.T) {
 	_, getErr := s.GetNotice(ctx, "1")
 	_, bindErr := s.BindServerKey(ctx, "1", "application-key")
 	_, checkErr := s.CheckServerKey(ctx, "1")
-	for _, err := range []error{getErr, bindErr, checkErr, s.AddNotices(ctx, "1"), s.DelNotices(ctx, "1")} {
+	for _, err := range []error{getErr, bindErr, checkErr, s.TestNotice(ctx, "1"), s.AddNotices(ctx, "1"), s.DelNotices(ctx, "1")} {
 		if !errors.Is(err, errcode.NotImplemented) {
 			t.Fatalf("missing database must fail safely, got %v", err)
 		}

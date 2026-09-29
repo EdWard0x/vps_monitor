@@ -29,7 +29,7 @@ export const VpsCard: React.FC<VpsCardProps> = ({ vps }) => {
             >
               {vps.merchant.name}
             </Link>
-            <h3 className="text-base font-bold text-gray-900 mt-0.5 line-clamp-1">
+            <h3 className="text-base font-bold text-gray-900 mt-0.5 break-words">
               <Link to={`/vps/${vps.id}`} className="hover:text-brand-600">
                 {vps.name}
               </Link>

@@ -34,6 +34,15 @@ func (a NoticeApi) BindServerKey(c *gin.Context) {
 	ok(c, out)
 }
 
+// 立即发送一次测试消息，不写入库存通知记录。
+func (a NoticeApi) TestNotice(c *gin.Context) {
+	if err := a.Service.TestNotice(c.Request.Context(), principalID(c)); err != nil {
+		response.Error(c, err)
+		return
+	}
+	ok(c, "success")
+}
+
 // 对全部收藏开启通知。
 func (a NoticeApi) AddNotices(c *gin.Context) {
 	err := a.Service.AddNotices(c.Request.Context(), principalID(c))

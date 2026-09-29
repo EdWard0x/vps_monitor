@@ -27,7 +27,7 @@ export const NotificationSettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<NoticeSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<'save' | 'enable' | 'disable' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'test' | 'enable' | 'disable' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [needsKey, setNeedsKey] = useState(false);
@@ -124,6 +124,21 @@ export const NotificationSettingsPage: React.FC = () => {
     }
   };
 
+  const sendTest = async () => {
+    if (busy || !settings?.key_bound) return;
+    setBusy('test');
+    setError(null);
+    setSuccess(null);
+    try {
+      await noticeApi.testNotice();
+      setSuccess('测试通知已发送，请到微信查看是否收到。');
+    } catch (err) {
+      setError(isMissingServerKey(err) ? '请先绑定 Server 酱 Key，再发送测试通知。' : '测试通知发送失败，请检查 Key 和 Server 酱服务后重试。');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
@@ -140,11 +155,12 @@ export const NotificationSettingsPage: React.FC = () => {
           {success && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</div>}
           <section className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
             <div className="flex items-center gap-3"><h2 className="text-base font-bold text-gray-900">Server 酱绑定</h2><Badge variant={settings.key_bound ? 'green' : 'yellow'}>{settings.key_bound ? '已绑定' : '未绑定'}</Badge></div>
-            <p className="text-sm text-gray-500">Key 只用于你的微信通知。保存 Key 不会自动开启通知，也不会验证实际送达。</p>
+            <p className="text-sm text-gray-500">Key 只用于你的微信通知。保存后可发送测试通知，到微信确认收到消息；库存通知仍需单独开启。</p>
             <Link to="/account/notifications/guide" className="inline-block text-sm font-medium text-brand-700 underline underline-offset-2 hover:text-brand-800">查看图文绑定说明</Link>
             <div className="flex flex-wrap gap-2">
               <Button onClick={startBinding} disabled={Boolean(busy)}>{settings.key_bound ? '前往 Server 酱更换 Key' : '前往 Server 酱绑定'}</Button>
               <Button variant="outline" disabled={Boolean(busy)} onClick={() => setShowForm((value) => !value)}>{settings.key_bound ? '手动更换 Key' : '手动填写 Key'}</Button>
+              <Button variant="outline" onClick={sendTest} loading={busy === 'test'} disabled={Boolean(busy) || !settings.key_bound}>发送测试通知</Button>
             </div>
             {showForm && <form onSubmit={saveKey} className="max-w-md space-y-3">
               <Input label="Server 酱 Key" type={showKey ? 'text' : 'password'} autoComplete="off" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} disabled={Boolean(busy)} maxLength={64} placeholder="填写实际 Key" />

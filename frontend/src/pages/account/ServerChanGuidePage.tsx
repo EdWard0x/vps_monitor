@@ -22,7 +22,7 @@ const steps = [
   },
   {
     title: '复制 Key 并返回本站',
-    description: '点击“复制Key，然后返回vps-monitor”。返回后等待保存完成，确认显示“已绑定”，再开启微信通知。',
+    description: '点击“复制Key，然后返回vps-monitor”。返回后等待保存完成，确认显示“已绑定”，点击“发送测试通知”并检查微信，最后开启微信通知。',
     image: '/images/serverchan/04-return-to-site.png',
     alt: 'Server 酱 AppKey 创建完成页面，箭头指向“复制Key，然后返回vps-monitor”按钮',
   },
@@ -73,13 +73,13 @@ export const ServerChanGuidePage: React.FC = () => (
       <ol className="list-decimal pl-5 space-y-2 text-sm leading-6 text-gray-700">
         <li>在 Server 酱页面获取你自己的 SendKey。</li>
         <li>返回“微信通知”，点击“手动填写 Key”，粘贴 Key 并保存。</li>
-        <li>确认显示“已绑定”后，点击“开启微信通知”。</li>
+        <li>确认显示“已绑定”后，点击“发送测试通知”并检查微信，再开启微信通知。</li>
       </ol>
     </section>
 
     <aside className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
       <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
-      <p>Key 属于私密凭证，请不要在截图、聊天或公开页面中展示。保存 Key 只表示绑定完成；还需手动开启通知，且保存时不会验证微信消息是否实际送达。</p>
+      <p>Key 属于私密凭证，请不要在截图、聊天或公开页面中展示。保存 Key 后可以发送测试通知并在微信确认收到；库存通知仍需手动开启。</p>
     </aside>
   </div>
 );

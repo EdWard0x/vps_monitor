@@ -10,6 +10,7 @@ import (
 	"vpsmonitor/model/entity"
 	"vpsmonitor/model/errcode"
 	"vpsmonitor/model/response"
+	"vpsmonitor/utils/notice"
 
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -81,6 +82,20 @@ func (s *NoticeService) CheckServerKey(ctx context.Context, uid string) (string,
 	}
 	return "", errcode.ServerTurboNoRecord
 }
+
+// TestNotice sends one immediate message without changing notification settings or history.
+func (s *NoticeService) TestNotice(ctx context.Context, uid string) error {
+	key, err := s.CheckServerKey(ctx, uid)
+	if err != nil {
+		return err
+	}
+	result, err := notice.ServerTurbo(ctx, key, "VPS Monitor 微信通知测试", "如果你收到了这条消息，说明 Server 酱 Key 已绑定且测试通知发送成功。")
+	if err != nil || result == nil || result.Code != 0 {
+		return errcode.ServerTurboFailed
+	}
+	return nil
+}
+
 func (s *NoticeService) DelNotices(ctx context.Context, uid string) error {
 	return s.setNoticeEnabled(ctx, uid, false)
 }

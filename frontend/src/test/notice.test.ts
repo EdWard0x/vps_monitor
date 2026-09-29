@@ -125,6 +125,17 @@ describe('微信通知前端契约', () => {
     expect(calls).toEqual(['PUT', 'GET', 'POST', 'GET']);
   });
 
+  it('sends a one-off test notification without sending a Key or changing settings', async () => {
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const request = new Request(url, init);
+      expect(request.method).toBe('POST');
+      expect(new URL(url).pathname).toBe('/api/v1/me/notice/test');
+      expect(await request.json()).toEqual({});
+      return ok('success');
+    });
+    await expect(noticeApi.testNotice()).resolves.toMatchObject({ data: 'success' });
+  });
+
   it('closes globally without vpsId and rejects an unconfirmed state', async () => {
     let settings = { key_bound: true, notice_enabled: true };
     vi.stubGlobal('fetch', async (input: string, init: RequestInit) => {
